@@ -17,6 +17,7 @@ Contract model split:
 2. `state.json → tasks[]` adds `contract_twin`; `contract_twin_status: valid` requires both files to exist and the twin to pass the validation checklist.
 3. Task briefs add `CONTRACT_TWIN`; handoff, validation, and acceptance criteria reference both paths.
 4. The narrative contract is authoritative for intent and semantics; the twin is authoritative for machine-checkable dispatch fields; a contradiction is a contract defect.
+5. Token accounting now works on OpenCode V2 (`session.step.*`) and 1.x (`message.updated`), ignores duplicate updates, and records session, role, model, provider, tokens, and cost.
 
 ## Changelog v2.8-hybrid
 
@@ -846,6 +847,8 @@ Similar bug patterns found outside the task are reported, not fixed.
 ### 5.16. Token accounting
 
 - The team-tokens plugin maintains `tokens.log` automatically when enabled.
+- OpenCode V2 records one JSONL entry per completed assistant step (`session.step.ended`/`session.step.failed`); OpenCode 1.x records one entry per completed assistant message (`message.updated`). Duplicate updates for the same message or event are ignored.
+- Entry fields: `ts`, `session`, `message`, `role`, `model`, `provider`, `task` (when the runtime supplies one), `tokens` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`), `cost`.
 - Agents never edit the journal.
 - Detailed statistics are shown by `/team-tokens-used`.
 
@@ -2212,12 +2215,12 @@ No journal or sections:
 
 Show:
 
-- totals by session;
+- totals by session (the closest available proxy for a launch);
 - totals by role;
-- totals by task `T<N>`;
+- totals by task `T<N>` when the journal contains task IDs, otherwise group by session/launch;
 - grand total;
-- average usage per launch;
-- top-5 most expensive launches;
+- average usage per session/launch;
+- top-5 most expensive sessions/launches;
 - anomalies.
 
 The journal is read-only.

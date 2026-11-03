@@ -171,8 +171,9 @@ TYPICAL SCENARIOS
    recorded in state.json without re-running completed steps.
 
 7. Cost audit
-   Run /team-tokens-used to see token spending by session, role, task and
-   model, plus the most expensive launches and anomalies.
+   Run /team-tokens-used to see token spending by session/launch, role,
+   model, provider, and task when task IDs are recorded, plus the most
+   expensive sessions/launches and anomalies.
 
 ================================================================================
 COMMANDS
@@ -197,7 +198,8 @@ COMMANDS
 
 /team-tokens-used
     Statistics from tokens.log (written by the plugin): totals by session,
-    role, task; average per launch; top-5 most expensive launches; anomalies.
+    role, model, provider, and task when present; average per session/launch;
+    top-5 most expensive sessions/launches; anomalies.
     Read-only — the log is never edited by agents.
 
 ================================================================================
@@ -227,8 +229,9 @@ settings.heartbeat (on/off)
     subagent works (recommended on).
 
 settings.tokens_log (on/off)
-    Token accounting; the plugin appends one JSONL record per assistant
-    message to team-workspace/<slug>/tokens.log.
+    Token accounting; the plugin appends one JSONL record per completed
+    assistant step (opencode V2) or completed assistant message (1.x) to
+    team-workspace/<slug>/tokens.log. Duplicate updates are ignored.
 
 settings.regression_mode (changed/full)
     Final-testing scope. Default is changed (only affected behavior);

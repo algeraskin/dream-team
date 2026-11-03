@@ -1603,13 +1603,13 @@ agent: team-lead
 Журнала нет или учёт отключён — сообщить, что журнал ещё не создан или учёт выключен; предложить `/team-setup`.
 
 Показать:
-- итоги по сессиям;
-- итоги по ролям;
-- итоги по задачам `T<N>`;
+- итоги по сессиям (наиболее близкий доступный прокси запуска);
+- итоги по ролям, моделям и провайдерам;
+- итоги по задачам `T<N>`, когда в журнале есть ID задач; иначе группировать по сессиям/запускам и указать, что ID задач отсутствуют;
 - общий итог;
-- средний расход на запуск;
-- топ-5 самых дорогих запусков;
-- аномалии (запуски сильно выше среднего).
+- средний расход на сессию/запуск;
+- топ-5 самых дорогих сессий/запусков;
+- аномалии (сессии/запуски сильно выше среднего).
 
 Журнал только для чтения: `tokens.log` не изменять.
 DEPLOY_EOF_.opencode_command_team-tokens-used.md
@@ -2011,10 +2011,17 @@ DEPLOY_EOF_.opencode_plugins_team-compact.js
 write_file "$DST/.opencode/plugins/team-tokens.js" <<'DEPLOY_EOF_.opencode_plugins_team-tokens.js'
 // team-tokens plugin — maintains team-workspace/<active-project>/tokens.log
 // The journal is read-only for agents; /team-tokens-used reads it.
-// Records are appended per assistant message that carries token usage.
+//
+// OpenCode V2 uses session.step.ended/session.step.failed events; the legacy
+// OpenCode 1.x plugin API keeps using message.updated. The module exports both:
+//   - default { id, setup }          for OpenCode V2
+//   - hidden  { server }             for OpenCode 1.x
+// so one deployed file works on both runtimes.
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
+
+const MAX_SEEN = 10000
 
 function findActiveWorkspace(directory) {
   const root = join(directory, "team-workspace")
@@ -2046,44 +2053,182 @@ function tokensLogEnabled(workspace) {
   }
 }
 
-export const TeamTokens = async ({ directory }) => {
+function normalizeTokens(tokens) {
+  return {
+    input: tokens?.input ?? 0,
+    output: tokens?.output ?? 0,
+    cache_read: tokens?.cache?.read ?? 0,
+    cache_write: tokens?.cache?.write ?? 0,
+    reasoning: tokens?.reasoning ?? 0,
+  }
+}
+
+function hasUsage(tokens) {
+  return Boolean(tokens.input || tokens.output || tokens.cache_read || tokens.cache_write || tokens.reasoning)
+}
+
+function appendRecord(directory, record) {
+  try {
+    const workspace = findActiveWorkspace(directory)
+    if (!workspace || !tokensLogEnabled(workspace)) return
+    if (!existsSync(workspace)) mkdirSync(workspace, { recursive: true })
+    appendFileSync(join(workspace, "tokens.log"), JSON.stringify(record) + "\n")
+  } catch {
+    // never break the session because of accounting
+  }
+}
+
+function record(directory, input) {
+  const tokens = normalizeTokens(input.tokens)
+  if (!hasUsage(tokens)) return
+  appendRecord(directory, {
+    ts: new Date().toISOString(),
+    session: input.session ?? null,
+    message: input.message ?? null,
+    role: input.role ?? null,
+    model: input.model ?? null,
+    provider: input.provider ?? null,
+    task: input.task ?? null,
+    tokens,
+    cost: input.cost ?? null,
+  })
+}
+
+function remember(set, value) {
+  if (!value) return
+  set.add(value)
+  if (set.size > MAX_SEEN) set.delete(set.values().next().value)
+}
+
+// OpenCode 1.x / legacy API: message.updated with a cumulative assistant message.
+function legacyPlugin({ directory }) {
+  const seen = new Set()
   return {
     event: async ({ event }) => {
       try {
         if (event?.type !== "message.updated") return
         const info = event.properties?.info
         if (!info || info.role !== "assistant") return
-        const tokens = info.tokens
-        if (!tokens || (!tokens.input && !tokens.output)) return
-
-        const workspace = findActiveWorkspace(directory)
-        if (!workspace || !tokensLogEnabled(workspace)) return
-        if (!existsSync(workspace)) mkdirSync(workspace, { recursive: true })
-
-        const record = {
-          ts: new Date().toISOString(),
-          session: info.sessionID ?? null,
-          role: info.agent ?? info.mode ?? null,
-          model: info.modelID ?? null,
-          provider: info.providerID ?? null,
-          task: null,
-          tokens: {
-            input: tokens.input ?? 0,
-            output: tokens.output ?? 0,
-            cache_read: tokens.cache?.read ?? 0,
-            cache_write: tokens.cache?.write ?? 0,
-            reasoning: tokens.reasoning ?? 0,
-          },
-          cost: info.cost ?? null,
-        }
-
-        appendFileSync(join(workspace, "tokens.log"), JSON.stringify(record) + "\n")
+        // Only the completed message carries final usage; intermediate updates
+        // repeat the same message with growing cumulative counts.
+        if (info.time?.completed === undefined && info.finish === undefined) return
+        const key = info.id ?? `${info.sessionID}:${info.time?.created}`
+        if (!key || seen.has(key)) return
+        remember(seen, key)
+        record(directory, {
+          session: info.sessionID,
+          message: info.id,
+          role: info.agent ?? info.mode,
+          model: info.modelID,
+          provider: info.providerID,
+          task: info.metadata?.task,
+          tokens: info.tokens,
+          cost: info.cost,
+        })
       } catch {
         // never break the session because of accounting
       }
     },
   }
 }
+
+// OpenCode V2: session.step.started carries agent/model, step.ended/failed carries usage.
+function startV2(ctx) {
+  const directory = ctx?.location?.directory
+  if (!directory) return
+  const abort = new AbortController()
+  const steps = new Map()
+  const sessions = new Map()
+  const seen = new Set()
+
+  const keyOf = (data) => `${data?.sessionID ?? ""}\u0000${data?.assistantMessageID ?? ""}`
+
+  const run = async () => {
+    try {
+      const events = ctx.event.subscribe({
+        types: [
+          "session.created",
+          "session.deleted",
+          "session.agent.selected",
+          "session.model.selected",
+          "session.step.started",
+          "session.step.ended",
+          "session.step.failed",
+        ],
+        signal: abort.signal,
+      })
+      for await (const event of events) {
+        try {
+          if (!event || event.type === "server.connected") continue
+          const data = event.data ?? {}
+          const key = keyOf(data)
+
+          if (event.type === "session.created") {
+            sessions.set(data.sessionID, { agent: data.agent ?? null, model: data.model ?? null })
+            continue
+          }
+          if (event.type === "session.deleted") {
+            sessions.delete(data.sessionID)
+            continue
+          }
+          if (event.type === "session.agent.selected") {
+            const session = sessions.get(data.sessionID) ?? {}
+            sessions.set(data.sessionID, { ...session, agent: data.agent ?? null })
+            continue
+          }
+          if (event.type === "session.model.selected") {
+            const session = sessions.get(data.sessionID) ?? {}
+            sessions.set(data.sessionID, { ...session, model: data.model ?? null })
+            continue
+          }
+          if (event.type === "session.step.started") {
+            steps.set(key, { agent: data.agent ?? null, model: data.model ?? null })
+            continue
+          }
+
+          if (event.type !== "session.step.ended" && event.type !== "session.step.failed") continue
+          if (event.id && seen.has(event.id)) continue
+          remember(seen, event.id)
+
+          const meta = steps.get(key) ?? sessions.get(data.sessionID) ?? {}
+          steps.delete(key)
+          record(directory, {
+            session: data.sessionID,
+            message: data.assistantMessageID,
+            role: meta.agent,
+            model: meta.model?.id,
+            provider: meta.model?.providerID,
+            task: event.metadata?.task,
+            tokens: data.tokens,
+            cost: data.cost,
+          })
+        } catch {
+          // ignore malformed events; keep the subscription alive
+        }
+      }
+    } catch {
+      // the server connection closed; the plugin will be disposed with the session
+    }
+  }
+
+  void run()
+  return () => abort.abort()
+}
+
+const plugin = {
+  id: "team-tokens",
+  setup: startV2,
+}
+
+// OpenCode 1.x detects the legacy plugin through `server`; keep it
+// non-enumerable so the V2 plugin schema sees a clean { id, setup } object.
+Object.defineProperty(plugin, "server", {
+  value: legacyPlugin,
+  enumerable: false,
+})
+
+export default plugin
+export const TeamTokens = legacyPlugin
 DEPLOY_EOF_.opencode_plugins_team-tokens.js
 
 write_file "$DST/.opencode/skill/architecture-guide/SKILL.md" <<'DEPLOY_EOF_.opencode_skill_architecture-guide_SKILL.md'
@@ -2941,6 +3086,7 @@ write_file "$DST/agent-team-spec.md" <<'DEPLOY_EOF_agent-team-spec.md'
 2. `state.json → tasks[]` получает поле `contract_twin`; `contract_twin_status: valid` требует наличия обоих файлов и прохождения двойником чек-листа валидации.
 3. Брифы задач получают `CONTRACT_TWIN`; передача, валидация и критерии приёмки ссылаются на оба пути.
 4. Нарративный контракт — источник истины для смысла и семантики; двойник — для машиночитаемых полей запуска; противоречие является дефектом контракта.
+5. Учёт токенов теперь работает в OpenCode V2 (`session.step.*`) и 1.x (`message.updated`), игнорирует повторные обновления и записывает сессию, роль, модель, провайдера, токены и стоимость.
 
 ## Список изменений v2.8-hybrid
 
@@ -3770,6 +3916,8 @@ types/interfaces → implementation → integration → tests
 ### 5.16. Учёт токенов
 
 - Плагин team-tokens ведёт `tokens.log` автоматически при включении.
+- OpenCode V2 записывает одну JSONL-запись на завершённый шаг ассистента (`session.step.ended`/`session.step.failed`); OpenCode 1.x — одну запись на завершённое сообщение ассистента (`message.updated`). Повторные обновления того же сообщения или события игнорируются.
+- Поля записи: `ts`, `session`, `message`, `role`, `model`, `provider`, `task` (когда runtime его передаёт), `tokens` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`), `cost`.
 - Агенты никогда не редактируют журнал.
 - Детальная статистика показывается через `/team-tokens-used`.
 
@@ -5135,12 +5283,12 @@ Skills:
 
 Показать:
 
-- итоги по сессиям;
+- итоги по сессиям (наиболее близкий доступный прокси запуска);
 - итоги по ролям;
-- итоги по задачам `T<N>`;
+- итоги по задачам `T<N>`, когда в журнале есть ID задач; иначе группировать по сессиям/запускам;
 - общий итог;
-- средний расход на запуск;
-- топ-5 самых дорогих запусков;
+- средний расход на сессию/запуск;
+- топ-5 самых дорогих сессий/запусков;
 - аномалии.
 
 Журнал — только для чтения.
@@ -5962,8 +6110,9 @@ MCP-серверы (опционально)
    записанного в state.json, без повторного выполнения завершённых шагов.
 
 7. Аудит затрат
-   Выполните /team-tokens-used — расход токенов по сессиям, ролям, задачам
-   и моделям, самые дорогие запуски и аномалии.
+   Выполните /team-tokens-used — расход токенов по сессиям/запускам, ролям,
+   моделям, провайдерам и задачам, когда ID задач записаны, а также самые
+   дорогие сессии/запуски и аномалии.
 
 ================================================================================
 КОМАНДЫ
@@ -5989,7 +6138,8 @@ MCP-серверы (опционально)
 
 /team-tokens-used
     Статистика из tokens.log (пишет плагин): итоги по сессиям, ролям,
-    задачам; среднее на запуск; топ-5 самых дорогих запусков; аномалии.
+    моделям, провайдерам и задачам, когда они есть; среднее на
+    сессию/запуск; топ-5 самых дорогих сессий/запусков; аномалии.
     Только чтение — журнал агентами никогда не правится.
 
 ================================================================================
@@ -6020,8 +6170,9 @@ settings.heartbeat (on/off)
     прогресс, пока работает субагент (рекомендуется on).
 
 settings.tokens_log (on/off)
-    Учёт токенов; плагин добавляет по одной JSONL-записи на каждое сообщение
-    ассистента в team-workspace/<slug>/tokens.log.
+    Учёт токенов; плагин добавляет по одной JSONL-записи на завершённый шаг
+    ассистента (opencode V2) или завершённое сообщение ассистента (1.x) в
+    team-workspace/<slug>/tokens.log. Повторные обновления игнорируются.
 
 settings.regression_mode (changed/full)
     Охват финального тестирования. По умолчанию changed (только затронутое
