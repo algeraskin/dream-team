@@ -2,12 +2,21 @@
 # ToR: Virtual Software Development Team
 ## Multi-agent system for opencode
 
-**Version:** 2.8-hybrid  
+**Version:** 2.9-hybrid  
 **Date:** 2026-11-04  
 **Status:** final  
 **Base:** v2.4 + process governance enhancements + GLM v2.5 borrowings  
 
 This is the unified technical specification for the “virtual development team” agent system. The file is self-contained: an analogous team can be created from it in any opencode project from scratch.
+
+## Changelog v2.9-hybrid
+
+Contract model split:
+
+1. Every development contract now consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). The twin is a standalone file and is no longer embedded in the markdown.
+2. `state.json → tasks[]` adds `contract_twin`; `contract_twin_status: valid` requires both files to exist and the twin to pass the validation checklist.
+3. Task briefs add `CONTRACT_TWIN`; handoff, validation, and acceptance criteria reference both paths.
+4. The narrative contract is authoritative for intent and semantics; the twin is authoritative for machine-checkable dispatch fields; a contradiction is a contract defect.
 
 ## Changelog v2.8-hybrid
 
@@ -200,8 +209,8 @@ The security gate applies even in custom-flow, except for the customer’s expli
 | 2. Clarify | Questions to the customer; solution options with pros/cons | `00-requirements/01-clarifications.md`, `02-final-requirements.md` |
 | 2b. Flow configuration | Only for `custom-flow`: agree stage enable/disable and refinements | `state.json → flow`, optionally `00-requirements/03-flow-v<N>.md` |
 | 3. Analysis | `task → analyst`: PRD-style requirement pool, FR/NFR, flows, journeys, UI, scenarios, open questions | `01-analysis/` |
-| 4. Architecture | `task → architect`: testable system design, stack, interfaces, failure modes, contracts with JSON twins | `02-architecture/`, contract twins if already created |
-| 5. Decomposition | Atomic tasks, dependency order, parallel groups, contracts with valid JSON twins | `03-plan/00-decomposition.md`, `01-tasks.md`, `02-schedule.md`, `contracts/T<N>.md` |
+| 4. Architecture | `task → architect`: testable system design, stack, interfaces, failure modes, contracts with separate JSON twins | `02-architecture/`, `03-plan/contracts/T<N>.md + T<N>.json` if already created |
+| 5. Decomposition | Atomic tasks, dependency order, parallel groups, contracts with valid JSON twins | `03-plan/00-decomposition.md`, `01-tasks.md`, `02-schedule.md`, `contracts/T<N>.md`, `contracts/T<N>.json` |
 | 6. Development | Parallel groups up to 3 tasks; code → review → security if triggered → rework → isolated testing | `04-development/task-T<N>/report-v<N>.md`, `test-scenarios.md`, `05-review/T<N>-review-v<N>.md` |
 | 7. Integration | `task → integrator` assembles the common solution | `06-integration/integration-report-v<N>.md` |
 | 8. Review of common solution | `task → code-reviewer`; security if required; blocker/major → rework | `05-review/final-review-v<N>.md` |
@@ -362,7 +371,7 @@ team-workspace/<slug>/
 ├── 01-analysis/        FR/NFR + requirement pool, data flows, journeys, UI, test scenarios,
 │                       scout reports, research notes
 ├── 02-architecture/    architecture, stack, data model, interfaces, deployment
-├── 03-plan/            decomposition, tasks, schedule, contracts/T<N>.md with JSON twins
+├── 03-plan/            decomposition, tasks, schedule, contracts/T<N>.md (narrative) + T<N>.json (twin)
 ├── 04-development/     task-T<N>/: developer reports, isolated-test scenarios
 ├── 05-review/          review reports, security reports
 ├── 06-integration/     build and infrastructure reports
@@ -377,10 +386,10 @@ team-workspace/<slug>/
 
 ### Artifact rules
 
-1. An artifact is markdown.
+1. Human-readable artifacts are markdown. The machine contract twin `T<N>.json` is the only JSON artifact type; service files (`state.json`, `models.json`, `tokens.log`, `compaction.log`, `.compact-pending.json`) are not artifacts.
 2. A new iteration = a new file `-v<N>`.
 3. Previous versions are never overwritten.
-4. Contract files end with the fenced JSON twin. The twin is versioned together with the contract.
+4. Every contract consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). They are authored, reviewed, and updated together; the twin is never embedded in the markdown. Contract filenames use the task ID without `-v<N>`; a revised contract updates both files together.
 5. Project code lives outside `team-workspace`, except reports and autotests where explicitly defined.
 6. `tokens.log` and `compaction.log` are read-only for agents.
 7. After delivery, drafts and all previous `-v<N>` versions are deleted. Final versions remain in `00–07`, outcomes in `08-delivery`.
@@ -471,6 +480,7 @@ Evidence: <commands, test results, when applicable>
       "depends_on": [],
       "parallel_group": 1,
       "contract": "03-plan/contracts/T1.md",
+      "contract_twin": "03-plan/contracts/T1.json",
       "code_paths": [],
       "artifacts": [],
       "auto_launch": false,
@@ -535,7 +545,7 @@ Evidence: <commands, test results, when applicable>
     The choice is written as `changed` or `full`. Missing means `changed`. The question is not asked when testing is disabled in flow.
 13. `tasks[].auto_launch` is set when the customer chose “Launch and don’t ask until this task’s verdict”.
 14. `tasks[].note` stores service notes by the team lead, including explicit waivers for failing executable feedback.
-15. `tasks[].contract_twin_status` is `missing`, `invalid`, or `valid`.
+15. `tasks[].contract_twin_status` is `missing`, `invalid`, or `valid`; `valid` requires both `T<N>.md` and `T<N>.json` to exist and the twin to pass the validation checklist.
 16. `tasks[].security_sensitive` mirrors the twin and/or security gate decision.
 17. `tasks[].executable_feedback_status` is `missing`, `failed`, `passed`, or `waived`.
 18. `tasks[].review_status` stores the latest review/security/testing verdict relevant to the task.
@@ -546,14 +556,20 @@ Evidence: <commands, test results, when applicable>
 23. A light pipeline in a delivered project (`phase: done`) reactivates the project by changing `request_type`, moving `phase` back as work proceeds, and maintaining `tasks`.
 24. `settings.compact_policy` is set at `/team-setup`. Values: `plugin` (default; the team-compact plugin compacts the session at step checkpoints and injects a `state.json` snapshot into the summary) or `prompt` (the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c). Missing means `plugin`.
 25. `settings.after_compaction_auto` is set at `/team-setup`. When `true` (default), a step-checkpoint compaction adds a synthetic continue turn and the pipeline proceeds by itself; the team lead re-reads `state.json` first. When `false`, the team lead waits for the customer. Meaningful only with `compact_policy: plugin`; with `prompt` the value is written as `false` (manual compaction never auto-continues).
+26. `tasks[].contract` is the path to the narrative contract `03-plan/contracts/T<N>.md`; `tasks[].contract_twin` is the path to the separate JSON twin `03-plan/contracts/T<N>.json`.
 
 ---
 
-## 4.2. Contract JSON twin
+## 4.2. Contract files: narrative and JSON twin
 
-Every contract file `03-plan/contracts/T<N>.md` must end with a fenced JSON block called the contract twin.
+Every development contract consists of two separate files in `03-plan/contracts/` with the same base name:
 
-Example:
+- `T<N>.md` — the narrative contract: goal, scope, interfaces, errors, validation, idempotency/retry, implementation notes, and acceptance criteria in readable form;
+- `T<N>.json` — the machine-checkable contract twin validated before dispatch.
+
+The twin is a standalone JSON file, never embedded in the markdown. The two files share the task ID and are authored, reviewed, and updated together. The narrative contract is authoritative for intent; the twin is authoritative for machine-checkable dispatch fields. They must not contradict.
+
+Example twin (`03-plan/contracts/T1.json`):
 
 ```json
 {
@@ -584,7 +600,7 @@ Example:
 
 ### Twin rules
 
-1. The twin is part of the contract artifact and is versioned together with it.
+1. The twin is a separate file next to the narrative contract; both share the task ID and are authored, reviewed, and updated together.
 2. The team lead parses and validates the twin before dispatch.
 3. A task whose contract twin is missing or invalid must not be dispatched.
 4. An invalid twin is returned to the author with `STATUS: NEED_INPUT`.
@@ -602,6 +618,8 @@ Example:
     - `touches`
     - `blocked_by`
     - `security_sensitive`
+12. The narrative `T<N>.md` is authoritative for intent and semantics; the twin `T<N>.json` is authoritative for machine-checkable dispatch fields. A contradiction between them is a contract defect.
+13. `state.json → tasks[]` records both paths: `contract` (`T<N>.md`) and `contract_twin` (`T<N>.json`).
 
 ### Validation checklist
 
@@ -615,6 +633,7 @@ Before dispatch, the team lead checks:
 6. `security_sensitive` is boolean.
 7. Inputs exist as artifact paths or explicitly marked external references.
 8. Outputs are compatible with the task assignee’s role and permissions.
+9. The narrative `T<N>.md` exists and does not contradict the twin.
 
 ---
 
@@ -719,9 +738,9 @@ If a required input does not have an artifact path, the receiving agent must rep
 
 ### 5.7. Contract twin rule
 
-Every development contract must have a valid JSON twin before dispatch.
+Every development contract consists of `T<N>.md` (narrative) and `T<N>.json` (twin) and must have a valid twin before dispatch.
 
-The team lead validates the twin. Acceptance criteria are quoted verbatim into reviewer and tester briefs.
+The team lead validates the twin file. Acceptance criteria are quoted verbatim from the twin into reviewer and tester briefs.
 
 ### 5.8. Executable feedback rule
 
@@ -914,6 +933,7 @@ MODE: full | rework | diagnose
 GOAL: <one verifiable goal>
 CONTEXT: <project, stack, relevant decisions, existing patterns>
 CONTRACT: <path to 03-plan/contracts/T<N>.md>
+CONTRACT_TWIN: <path to 03-plan/contracts/T<N>.json>
 ITERATION: <N>
 REMARKS: <review/security/testing remarks or none>
 LEARNINGS: <KNOWN ISSUES, preferences, patterns or none>
@@ -956,6 +976,7 @@ Mandatory rules:
 5. Tester tasks must include `SCOPE`.
 6. A task must not be dispatched if its exit criteria are not testable.
 7. A task with `EXTERNAL_RESEARCH: required` must include `SOURCES_REQUIRED: yes` and name the permitted MCP tools in the brief.
+8. Development briefs must include both `CONTRACT` (`T<N>.md`) and `CONTRACT_TWIN` (`T<N>.json`); a missing path blocks dispatch.
 
 ---
 
@@ -1295,7 +1316,7 @@ Key duties:
 3. ToR clarification with options and pros/cons.
 4. Controlling analysis/architecture iterations.
 5. Decomposition into atomic tasks.
-6. Ensuring every development contract ends with a valid JSON twin.
+6. Ensuring every development contract has a narrative `T<N>.md` and a separate valid `T<N>.json` twin.
 7. Validating contract twins before dispatch.
 8. Performing Observe–Think–Act before every dispatch and phase transition.
 9. Validating phase quality gates.
@@ -1417,7 +1438,7 @@ Process:
    - testable contracts.
 5. Error model and failure modes.
 6. Deployment requirements.
-7. Contract JSON twins for contracts intended for development.
+7. Separate JSON twins (`T<N>.json`) for contracts intended for development, next to the narrative `T<N>.md`.
 
 Rules:
 
@@ -1440,7 +1461,7 @@ Artifacts:
 02-architecture/23-interfaces.md
 02-architecture/24-deployment.md
 02-architecture/00-summary.md
-03-plan/contracts/T<N>.md when acting as contract twin author
+03-plan/contracts/T<N>.md + T<N>.json when acting as contract author
 ```
 
 Skill:
@@ -2365,7 +2386,7 @@ Then:
 
 ### Contract twins
 
-16. Every development contract ends with a valid JSON twin.
+16. Every development contract has a narrative `T<N>.md` and a separate valid JSON twin `T<N>.json`.
 17. A task with missing or invalid twin is not dispatched and returns to the author with `STATUS: NEED_INPUT`.
 18. Acceptance criteria are quoted verbatim into reviewer and tester briefs.
 19. `security_sensitive: true` schedules the security gate.
@@ -2597,7 +2618,8 @@ For every interface contract:
 - Make the contract testable.
 
 For every contract intended for development:
-- End the contract file with a valid JSON twin.
+- Write the narrative contract to `T<N>.md`.
+- Write the machine twin to a separate `T<N>.json` file next to it.
 - Ensure the twin declares inputs, outputs, acceptance criteria, touches, blocked_by, and security_sensitive.
 
 External documentation:
@@ -2634,8 +2656,8 @@ For every task provide:
 - Risks
 
 For every development task:
-- Create a contract file.
-- End the contract file with a JSON twin.
+- Create a narrative contract file `T<N>.md`.
+- Create a separate machine twin `T<N>.json` with the same base name.
 - Validate that acceptance criteria are testable.
 - Validate that blocked_by has no cycles.
 - Validate that touches matches the assigned code area.
@@ -2833,5 +2855,5 @@ Use empty arrays where there are no items.
 
 ---
 
-End of agent-team-spec v2.8-hybrid.
+End of agent-team-spec v2.9-hybrid.
 <!-- ===== end of agent-09.md ===== -->

@@ -25,7 +25,7 @@ description: Дисциплина атомарной декомпозиции и
 ## JSON-двойники контрактов
 
 Для каждой задачи разработки:
-- Создайте файл контракта `03-plan/contracts/T<N>.md`, завершающийся JSON-двойником (task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
+- Создайте нарративный контракт `03-plan/contracts/T<N>.md` и отдельный машиночитаемый двойник `03-plan/contracts/T<N>.json` с тем же базовым именем (task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive). Двойник никогда не встраивается в markdown.
 - Проверьте, что критерии приёмки тестируемы.
 - Проверьте, что blocked_by не содержит циклов и совпадает с depends_on.
 - Проверьте, что touches соответствует закреплённой области кода.

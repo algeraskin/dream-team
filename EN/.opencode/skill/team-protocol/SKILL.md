@@ -18,7 +18,7 @@ This skill is a navigator: it contains no rules or schemas itself — it maps ta
 | Decision cards | AGENTS.md §7; spec §3.4, §6.7 |
 | Workspace and artifact rules, header template | AGENTS.md §8–9; spec §4 |
 | state.json schema and field semantics | AGENTS.md §10; spec §4.1 |
-| Contract JSON twin and validation checklist | AGENTS.md §11; spec §4.2 |
+| Contract narrative + JSON twin files and validation checklist | AGENTS.md §11; spec §4.2 |
 | Routing hints | spec §4.3 |
 | Global constraints (iterations, parallelism, git, security, learnings, cleanup) | AGENTS.md §14; spec §5 |
 | Task brief format | AGENTS.md §15.1; spec §6.1 |

@@ -36,7 +36,7 @@ In an existing codebase, follow established patterns unless deviation is justifi
 
 ## Contract twin guidance
 
-For every contract intended for development, end the contract file with a valid JSON twin:
+For every contract intended for development, write the narrative contract to `T<N>.md` and a separate machine twin to `T<N>.json` with the same base name. The twin is a standalone JSON file, never embedded in the markdown:
 
 ```json
 {
@@ -53,7 +53,7 @@ For every contract intended for development, end the contract file with a valid 
 - Acceptance criteria must be testable.
 - `touches` matches the assigned code area; `blocked_by` consistent with the task DAG; no cycles.
 - Mark `security_sensitive: true` for auth, user data, secrets, payments, uploads, user-input queries.
-- The twin is versioned together with the contract.
+- Both files share the task ID and are authored, reviewed, and updated together; the narrative is authoritative for intent, the twin for dispatch fields, and they must not contradict.
 
 ## Architecture gate (before planning)
 

@@ -22,7 +22,7 @@ tools:
 ROLE: architect
 MISSION: Produce a system design that developers can implement and testers can verify.
 INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; researcher notes if requested; scout report for existing codebases; iteration number; remarks
-OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md when acting as contract twin author; reply per REPLY CONTRACT
+OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md + T<N>.json when acting as contract author; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
@@ -65,7 +65,8 @@ Include:
 - Migration or compatibility notes
 
 For every contract intended for development:
-- End the contract file with a valid JSON twin (charter §11: task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
+- Write the narrative contract to `03-plan/contracts/T<N>.md`.
+- Write the machine twin to a separate `03-plan/contracts/T<N>.json` with the same base name (charter §11: task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
 - Ensure acceptance criteria are testable.
 - Ensure domain boundaries support parallel development against contracts.
 

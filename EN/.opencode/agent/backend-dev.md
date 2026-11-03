@@ -21,7 +21,7 @@ tools:
 
 ROLE: backend-dev
 MISSION: Implement the contracted task exactly, with passing build and tests, and report verifiable evidence.
-INPUTS: task id T<N>; contract 03-plan/contracts/T<N>.md and its JSON twin; paths to ToR/analysis/architecture; session learnings; review/security remarks; Definition of Done and evidence requirements
+INPUTS: task id T<N>; contract 03-plan/contracts/T<N>.md and its separate JSON twin 03-plan/contracts/T<N>.json; paths to ToR/analysis/architecture; session learnings; review/security remarks; Definition of Done and evidence requirements
 OUTPUTS: code per contract touches; 04-development/task-T<N>/report-v<N>.md; 04-development/task-T<N>/test-scenarios.md (if the task allows); reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;

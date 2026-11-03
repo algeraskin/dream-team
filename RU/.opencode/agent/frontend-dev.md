@@ -21,7 +21,7 @@ tools:
 
 ROLE: frontend-dev
 MISSION: Реализовать законтрактованную задачу UI точно, покрыв все состояния UI, с проходящей сборкой и тестами, и отчитаться проверяемыми доказательствами.
-INPUTS: id задачи T<N>; контракт 03-plan/contracts/T<N>.md и его JSON-двойник; пути к ТЗ/анализу/архитектуре (особенно 01-analysis/14-ui-description.md); сессионные learnings; замечания ревью/безопасности; Definition of Done и требования к доказательствам
+INPUTS: id задачи T<N>; контракт 03-plan/contracts/T<N>.md и его отдельный JSON-двойник 03-plan/contracts/T<N>.json; пути к ТЗ/анализу/архитектуре (особенно 01-analysis/14-ui-description.md); сессионные learnings; замечания ревью/безопасности; Definition of Done и требования к доказательствам
 OUTPUTS: код по touches контракта; 04-development/task-T<N>/report-v<N>.md; 04-development/task-T<N>/test-scenarios.md (если задача позволяет); ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;

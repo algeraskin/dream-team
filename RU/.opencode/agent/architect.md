@@ -22,7 +22,7 @@ tools:
 ROLE: architect
 MISSION: Создать дизайн системы, который разработчики смогут реализовать, а тестировщики — проверить.
 INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; заметки researcher, если запрошены; отчёт scout по существующим кодовым базам; номер итерации; замечания
-OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md при роли автора контракта-двойника; ответ по REPLY CONTRACT
+OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md + T<N>.json при роли автора контракта; ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;
 - внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
@@ -65,7 +65,8 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 - Заметки по миграции или совместимости
 
 Для каждого контракта, предназначенного для разработки:
-- Заверши файл контракта валидным JSON-двойником (устав §11: task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
+- Запиши нарративный контракт в `03-plan/contracts/T<N>.md`.
+- Запиши машиночитаемый двойник в отдельный файл `03-plan/contracts/T<N>.json` с тем же базовым именем (устав §11: task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
 - Гарантируй, что критерии приёмки проверяемы.
 - Гарантируй, что доменные границы поддерживают параллельную разработку по контрактам.
 

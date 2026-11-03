@@ -25,7 +25,7 @@ Preferred order: types/interfaces → implementation → integration → tests.
 ## Contract twins
 
 For every development task:
-- Create a contract file `03-plan/contracts/T<N>.md` ending with a JSON twin (task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive).
+- Create a narrative contract `03-plan/contracts/T<N>.md` and a separate machine twin `03-plan/contracts/T<N>.json` with the same base name (task, inputs, outputs, acceptance, touches, blocked_by, security_sensitive). The twin is never embedded in the markdown.
 - Validate that acceptance criteria are testable.
 - Validate that blocked_by has no cycles and matches depends_on.
 - Validate that touches matches the assigned code area.

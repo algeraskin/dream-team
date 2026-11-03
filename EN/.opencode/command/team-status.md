@@ -26,7 +26,7 @@ Show:
 - quality gate status (all 8 gates: passed/checked_at/note);
 - routing hints if present;
 - learnings (common issues, user preferences, project patterns);
-- task table (id, title, status, assignee, parallel group, contract twin status, executable feedback status, review status);
+- task table (id, title, status, assignee, parallel group, contract path, contract twin path, contract twin status, executable feedback status, review status);
 - open customer question;
 - latest artifact paths.
 

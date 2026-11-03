@@ -1,5 +1,5 @@
 VIRTUAL SOFTWARE DEVELOPMENT TEAM
-Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.8-hybrid)
+Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.9-hybrid)
 
 ================================================================================
 WHAT THIS IS
@@ -18,9 +18,10 @@ Key mechanisms:
   - pipelines per request type (full-project / increment / bugfix / question);
   - phase quality gates — a phase transition is allowed only when the gate
     passes;
-  - contract JSON twins — every development task gets a machine-checkable
-    contract (inputs, outputs, acceptance criteria, touched paths,
-    security sensitivity) validated before dispatch;
+  - narrative contract + JSON twin — every development task gets
+    `03-plan/contracts/T<N>.md` (readable contract) and a separate
+    `T<N>.json` machine twin (inputs, outputs, acceptance criteria, touched
+    paths, security sensitivity) validated before dispatch;
   - security gate — auth, user data, secrets, payments, uploads, user-input
     DB queries go through the security auditor;
   - least-privilege tool matrix — each agent can use only its role's tools;
@@ -141,7 +142,7 @@ TYPICAL SCENARIOS
 
 1. New project from scratch (full-project)
    Paste the ToR to team-lead. Pipeline: requirements -> analysis ->
-   architecture -> planning (atomic tasks + contract twins) -> parallel
+   architecture -> planning (atomic tasks + narrative contracts and JSON twins) -> parallel
    development (<=3 tasks, each code -> review -> security if triggered ->
    isolated testing) -> integration -> review of the common solution ->
    final testing -> delivery. Decision cards are published at every phase
@@ -150,7 +151,7 @@ TYPICAL SCENARIOS
 2. Increment on an existing codebase
    "Add <feature> to <service>". Pipeline: scout explores the codebase ->
    developer -> code-reviewer -> security if triggered -> tester (SCOPE:
-   changed). A minimal contract twin is still required.
+   changed). A minimal separate contract twin is still required.
 
 3. Bugfix with a known cause
    "Function X throws Y when Z". scout -> developer (fix only) ->

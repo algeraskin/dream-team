@@ -93,7 +93,7 @@ Checkpoint rules per request type:
 3. ToR clarification with options and pros/cons.
 4. Controlling analysis/architecture iterations (max 3 each).
 5. Decomposition into atomic tasks; DAG discipline; parallel groups up to 3 tasks; no dependencies inside a group.
-6. Ensuring every development contract ends with a valid JSON twin; validating twins before dispatch (checklist in the charter §11); missing/invalid twin → back to author with STATUS: NEED_INPUT.
+6. Ensuring every development contract has a narrative `03-plan/contracts/T<N>.md` and a separate valid `03-plan/contracts/T<N>.json` twin; validating twins before dispatch (checklist in the charter §11); missing/invalid twin → back to author with STATUS: NEED_INPUT.
 7. Validating phase quality gates before transitions; recording results in state.json → quality_gates.
 8. Publishing decision cards at phase boundaries and for substantive questions (format in the charter §7).
 9. Publishing launch notifications: `[DISPATCH]` / `[RESULT]` digests in launch_mode auto; full prompt + confirmation in confirm/custom-flow; always full on QUESTION/FAIL.

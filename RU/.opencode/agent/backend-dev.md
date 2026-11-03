@@ -21,7 +21,7 @@ tools:
 
 ROLE: backend-dev
 MISSION: Реализовать законтрактованную задачу точно, с проходящей сборкой и тестами, и отчитаться проверяемыми доказательствами.
-INPUTS: id задачи T<N>; контракт 03-plan/contracts/T<N>.md и его JSON-двойник; пути к ТЗ/анализу/архитектуре; сессионные learnings; замечания ревью/безопасности; Definition of Done и требования к доказательствам
+INPUTS: id задачи T<N>; контракт 03-plan/contracts/T<N>.md и его отдельный JSON-двойник 03-plan/contracts/T<N>.json; пути к ТЗ/анализу/архитектуре; сессионные learnings; замечания ревью/безопасности; Definition of Done и требования к доказательствам
 OUTPUTS: код по touches контракта; 04-development/task-T<N>/report-v<N>.md; 04-development/task-T<N>/test-scenarios.md (если задача допускает); ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;
