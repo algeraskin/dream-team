@@ -13,10 +13,10 @@ tools:
   list: true
   write: true
   edit: true
-   bash: true
-   team_checkpoint: true
-   webfetch: false
-   lsp: false
+  bash: true
+  team_checkpoint: true
+  webfetch: false
+  lsp: false
 ---
 
 ROLE: team-lead
