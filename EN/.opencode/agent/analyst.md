@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
+  webfetch: false
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: 00-requirements/02-final-requirements.md; scout report for existing code
 OUTPUTS: 01-analysis/10-functional-requirements.md, 11-nonfunctional-requirements.md, 12-data-flows.md, 13-user-journeys.md, 14-ui-description.md, 15-test-scenarios.md, 00-summary.md; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -71,6 +76,7 @@ For full-project requests:
 - Include competitive analysis only when the ToR names or implies an existing analogue.
 
 Do not invent missing information.
+- External research is routed through the team lead to researcher; do not browse externally.
 Use NEEDS CLARIFICATION for every unresolved ambiguity.
 Every requirement must be verifiable.
 New iteration = new files -v<N>; never overwrite previous versions.

@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": true
+  "fetch_*": true
+  "ddg-search_*": true
+  webfetch: true
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; researcher note
 OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md when acting as contract twin author; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -30,6 +35,16 @@ REPLY CONTRACT:
 TASK / ITERATION / STATUS / VERDICT / SCOPE / COUNTERS / ARTIFACTS /
 CREATED-MODIFIED / ROOT_CAUSE / EXECUTABLE_FEEDBACK / FOR LEARNINGS /
 SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
+
+## External documentation for technology selection
+
+When a stack, library, framework, SDK, or API is not fully covered by local sources:
+- Use Context7 MCP first (if available) for library docs; query the exact version.
+- Use fetch MCP for a known official URL; use ddg-search MCP to find one when unknown.
+- Use built-in webfetch only as a fallback when fetch is unavailable.
+- Record sources in 21-tech-stack.md and, when relevant, 23-interfaces.md.
+- Every version claim must be backed by a source or the project lockfile.
+- If no permitted external tool is available, state the limitation; never invent versions or APIs.
 
 ## Testable system design prompt block
 

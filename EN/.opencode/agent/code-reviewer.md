@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
+  webfetch: false
   bash: true
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: task id T<N>; path to its code; contract and contract JSON twin; paths t
 OUTPUTS: 05-review/T<N>-review-v<N>.md (or 05-review/final-review-v<N>.md for the common solution); reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix; bash for tests/builds only — file modification via bash is forbidden;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -36,6 +41,7 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 Review the task against the contract, contract twin, requirements, architecture, and engineering best practices.
 
 Process:
+0. External documentation is researched via the team lead/researcher; do not browse externally.
 1. Compliance check: contract; requirements; architecture; KISS/DRY/SOLID.
 2. Run tests and build using bash for tests/builds only.
 3. Re-run the commands from the developer report's executable feedback section.

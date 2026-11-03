@@ -1,5 +1,5 @@
 ВИРТУАЛЬНАЯ КОМАНДА РАЗРАБОТКИ ПО
-Мультиагентская SDLC-система для opencode на основе agent-team-spec.md (v2.7-hybrid)
+Мультиагентская SDLC-система для opencode на основе agent-team-spec.md (v2.8-hybrid)
 
 ================================================================================
 ЧТО ЭТО
@@ -27,6 +27,8 @@ PASS/FAIL), tester, integrator, devops.
   - матрица инструментов с минимальными привилегиями — каждый агент
     использует только инструменты своей роли; с заказчиком общается только
     тимлид;
+  - внешние исследования через MCP — context7/fetch/ddg-search, когда
+    доступны, с fallback на webfetch и цитированием источников;
   - передача через артефакты — все обмены идут через версионируемые
     markdown-артефакты в workspace, а не только в чате;
   - плагин учёта токенов и git-политика (своя рабочая ветка на запрос,
@@ -66,13 +68,61 @@ PASS/FAIL), tester, integrator, devops.
     ./deploy.sh <целевой-каталог> --force    # перезаписать файлы команды (с бэкапом)
     ./deploy.sh <целевой-каталог> --no-charter --no-spec
     ./deploy.sh <целевой-каталог> --with-default-agent
+    ./deploy.sh <целевой-каталог> --no-mcp   # не настраивать MCP-серверы
     ./deploy.sh -h                           # полная справка
 
   Он устанавливает файлы команды, дописывает `instructions: += AGENTS.md`
   в opencode.json целевого проекта (никогда не перезаписывая его; чартер
-  станет AGENTS-team.md, если у проекта уже есть свой AGENTS.md) и
-  проверяет результат. Существующие team-workspace/, tokens.log и
-  compaction.log в целевом проекте не затрагиваются.
+  станет AGENTS-team.md, если у проекта уже есть свой AGENTS.md), настраивает
+  опциональные MCP-серверы и проверяет результат. Существующие
+  team-workspace/, tokens.log и compaction.log в целевом проекте не
+  затрагиваются.
+
+MCP-серверы (опционально)
+  По умолчанию deploy.sh добавляет в opencode.json три MCP-сервера, сохраняя
+  существующие записи с теми же именами:
+
+    context7    remote, https://mcp.context7.com/mcp
+                опциональный заголовок CONTEXT7_API_KEY={env:CONTEXT7_API_KEY};
+                без ключа работает анонимно с меньшими лимитами.
+    fetch       local, uvx mcp-server-fetch
+    ddg-search  local, uvx duckduckgo-mcp-server
+
+  Требования: python3 для идемпотентного JSON-merge; uv/uvx для локальных
+  серверов fetch и ddg-search. Если uvx отсутствует, deploy.sh добавляет
+  context7, пропускает локальные серверы и выводит предупреждение. Флаг
+  --no-mcp полностью отключает настройку MCP. Формат конфига соответствует
+  установленному opencode: V2 использует mcp.servers; opencode 1.x — top-level mcp.
+
+  Ключ Context7
+    1. Создайте бесплатный ключ: https://context7.com/dashboard
+    2. Экспортируйте его в окружении, из которого запускается opencode:
+         export CONTEXT7_API_KEY="ctx7sk-..."
+       Для постоянной настройки в macOS/zsh добавьте export в ~/.zshrc;
+       в Linux/bash — в ~/.bashrc. Перезапустите терминал.
+       Либо запустите opencode на одну сессию:
+         CONTEXT7_API_KEY="ctx7sk-..." opencode
+    3. Проверьте, не выводя ключ:
+         test -n "$CONTEXT7_API_KEY" && echo "CONTEXT7_API_KEY is set"
+         opencode mcp list
+       context7 должен показать "connected".
+    4. deploy.sh записывает CONTEXT7_API_KEY={env:CONTEXT7_API_KEY} в
+       opencode.json и никогда не сохраняет сам ключ. Переменная должна
+       быть задана перед запуском opencode, а не только перед deploy.sh.
+    5. Без ключа context7 работает анонимно с меньшими лимитами;
+       остальные MCP-инструменты и fallback webfetch не затрагиваются.
+  Безопасность: не коммитьте ключ, не вписывайте его напрямую в
+  opencode.json и не публикуйте его в артефактах и отчётах.
+
+  Агенты проверяют доступность MCP во время выполнения. Если context7/
+  fetch/ddg-search отсутствуют, они откатываются на webfetch (где роли
+  разрешено) и затем на NEED_INPUT; состояние MCP в state.json не пишется.
+
+  Роли с внешним доступом:
+    researcher, architect, backend-dev, frontend-dev, devops (fetch/ddg;
+    context7 опционально), с webfetch как fallback для каждой роли, у которой
+    есть fetch. security и остальные роли локальны и маршрутизируют внешние
+    вопросы через researcher.
 
 Сопровождение deploy.sh (из корня репозитория):
   Вшитые копии файлов команды (payload после "exit 0" в deploy.sh)

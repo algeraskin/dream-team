@@ -1,6 +1,6 @@
 # Team Charter — Virtual Software Development Team
 
-Full specification: `agent-team-spec.md` (v2.7-hybrid). This charter is binding for all agents. Where this charter and an agent file conflict, the charter's mandatory constraints win; an agent file may narrow permissions and rules but never weaken them.
+Full specification: `agent-team-spec.md` (v2.8-hybrid). This charter is binding for all agents. Where this charter and an agent file conflict, the charter's mandatory constraints win; an agent file may narrow permissions and rules but never weaken them.
 
 ## 1. Purpose
 
@@ -44,17 +44,19 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 | Agent | Allowed | Denied |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (git and service commands only), `team_checkpoint` | `webfetch`, `lsp` |
-| `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
-| `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, MCP fetch/context7 for external knowledge, `write`, `edit` | `bash`, `task`, `question` |
-| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` (tests/builds only) | `task`, `question` |
-| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (git and service commands only), `team_checkpoint` | `webfetch`, MCP `context7`/`fetch`/`ddg-search`, `lsp` |
+| `analyst` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `bash`, `task`, `question` |
+| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, MCP external tools, `task`, `question` |
+| `researcher` | `read`, `list`, `glob`, `grep`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback), `write`, `edit` | `bash`, `task`, `question` |
+| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question` |
+| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` (tests/builds only) | `task`, `question`, `webfetch`, MCP external tools |
+| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question`, `webfetch`, MCP external tools |
+| `integrator` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question`, `webfetch`, MCP external tools |
+| `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, MCP `fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question`, MCP `context7` unless explicitly enabled |
 
-Notes: `question` and `team_checkpoint` belong to `team-lead` only and are disabled in all subagents. `bash` is role-scoped: `code-reviewer` — tests/builds only; `team-lead` — git and service commands only.
+Notes: `question` and `team_checkpoint` belong to `team-lead` only and are disabled in all subagents. `bash` is role-scoped: `code-reviewer` — tests/builds only; `team-lead` — git and service commands only. MCP tools are named `<server>_<tool>`; roles without external access explicitly disable `context7_*`, `fetch_*`, and `ddg-search_*`. `webfetch` is a fallback for roles granted `fetch`; tool availability is checked at runtime and is not stored in `state.json`.
 
 ## 5. Request types and pipelines
 
@@ -218,7 +220,8 @@ Every inter-agent handoff is an artifact with a schema: task brief, subagent rep
 - **Cleanup**: after delivery delete drafts and old `-v<N>` versions; keep final versions in `00–07` and outcomes in `08-delivery`.
 - **Languages**: prompts, artifacts, communication, identifiers, comments in English; autotests use the project test framework; Python/pytest default for greenfield.
 - **Git policy**: base branch `main` (else `master` or customer-named); every request gets its own working branch off the up-to-date base; the team-lead proposes the branch name, the customer accepts; commits by the team-lead with prefix `[team]: <phase> — <what>`; subagents do not perform git operations unless instructed; merging into base only after delivery acceptance by customer decision; branches recorded in `state.json → git`.
-- **Security rules**: secrets only via environment variables and `.env.example`; no customer data to external services without necessity; findings concrete, actionable, severity-graded.
+- **Security rules**: secrets only via environment variables and `.env.example`; no customer data to external services without necessity; never send secrets, credentials, personal data, or customer code to external MCP servers or websites; findings concrete, actionable, severity-graded.
+- **External information and MCP**: local sources first; then `context7` for library/framework/SDK/API docs, `fetch` for known URLs, `ddg-search` for discovery; `webfetch` is a fallback only where `fetch` is allowed. Cite every source (title, URL, access date, claim), record the tool used and any fallback, do not invent URLs or versions, and do not bypass the matrix with `bash`/`curl`/`wget`. `security` and other roles without external tools route questions through `researcher`. `deploy.sh` configures optional MCP servers; availability is checked at runtime, never persisted in `state.json`.
 - **Token accounting**: the team-tokens plugin maintains `tokens.log`; agents never edit it; `/team-tokens-used` shows statistics.
 - **Step checkpoints and compaction**: after every pipeline step the team-lead records a checkpoint via `team_checkpoint` and drives session compaction per `settings.compact_policy` (§6.1); `state.json` and artifacts are re-read after every compaction.
 - **Heartbeat**: when `settings.heartbeat` is on, long-running developer reports are created as skeletons at task start and updated as sections complete.
@@ -245,9 +248,9 @@ EXPECTED ARTIFACTS: <paths the agent must produce>
 
 Tester-only: `SCOPE: changed | full`, `SIGNAL: STOP | PROCEED` (only when re-dispatching after a tester QUESTION).
 
-Additional fields: `INPUT_ARTIFACTS`, `OUTPUT_ARTIFACTS`, `DEFINITION_OF_DONE`, `EVIDENCE_REQUIRED`, `ACCEPTANCE_CRITERIA` (quoted verbatim from the twin for reviewer/tester), `EXECUTABLE_FEEDBACK: required | not-applicable`, `DO_NOT_TOUCH`, `TEST_COMMAND`, `SELF_REVIEW: required`.
+Additional fields: `INPUT_ARTIFACTS`, `OUTPUT_ARTIFACTS`, `DEFINITION_OF_DONE`, `EVIDENCE_REQUIRED`, `ACCEPTANCE_CRITERIA` (quoted verbatim from the twin for reviewer/tester), `EXECUTABLE_FEEDBACK: required | not-applicable`, `DO_NOT_TOUCH`, `TEST_COMMAND`, `SELF_REVIEW: required`, `EXTERNAL_RESEARCH: required | optional | not-needed`, `PREFERRED_MCP: context7 | fetch | ddg-search | any | none`, `SOURCES_REQUIRED: yes | no`.
 
-Mandatory: development tasks include `DEFINITION_OF_DONE` and `EVIDENCE_REQUIRED`; developer full/rework tasks include `EXECUTABLE_FEEDBACK: required`; reviewer/tester briefs include verbatim `ACCEPTANCE_CRITERIA`; analysis/architecture/planning tasks include `OUTPUT_ARTIFACTS` and `DEFINITION_OF_DONE`; tester tasks include `SCOPE`; tasks with untestable exit criteria are not dispatched.
+Mandatory: development tasks include `DEFINITION_OF_DONE` and `EVIDENCE_REQUIRED`; developer full/rework tasks include `EXECUTABLE_FEEDBACK: required`; reviewer/tester briefs include verbatim `ACCEPTANCE_CRITERIA`; analysis/architecture/planning tasks include `OUTPUT_ARTIFACTS` and `DEFINITION_OF_DONE`; tester tasks include `SCOPE`; tasks with `EXTERNAL_RESEARCH: required` include `SOURCES_REQUIRED: yes` and the permitted MCP tools; tasks with untestable exit criteria are not dispatched.
 
 ### 15.2. Subagent reply format
 
@@ -307,6 +310,7 @@ INPUTS: <required artifact paths or state references>
 OUTPUTS: <artifacts and reply fields produced>
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -322,9 +326,9 @@ Mandatory prompt blocks (may be narrowed, never weakened or removed):
 
 - **team-lead** — Observe–Think–Act pre-dispatch discipline (read state.json, artifacts, gates, flow, learnings, hints; define goal, inputs, exit criteria; do not dispatch untestable tasks or tasks with missing/invalid twins; compose the brief, quote acceptance criteria verbatim, publish notifications, record the decision).
 - **analyst** — PRD-style requirements: Background/Business Goal, In/Out of Scope, Personas, User Stories, FR (stable ID, Must/Should/Could, acceptance criteria, testable, linked to source), NFR, Journeys, Exception Flows, Data/Integration Needs, Assumptions, Constraints, Glossary, Open Questions, Requirement Pool; full-project: ≤5 measurable product goals, P0/P1/P2 stories, pool table `requirement | source | priority | effort S/M/L | risk | FR ID`; no invention, `NEEDS CLARIFICATION` for ambiguities.
-- **architect** — testable design: context diagram, boundaries, responsibilities, stack with alternatives, data model, interface contracts (inputs/outputs/errors/validation/idempotency), error model, security controls, deployment, failure modes, migration notes; contracts end with valid JSON twins; YAGNI; brownfield follows existing patterns.
+- **architect** — testable design: context diagram, boundaries, responsibilities, stack with alternatives, data model, interface contracts (inputs/outputs/errors/validation/idempotency), error model, security controls, deployment, failure modes, migration notes; contracts end with valid JSON twins; external docs via `context7`/`fetch`/`ddg-search` with `webfetch` fallback; YAGNI; brownfield follows existing patterns.
 - **planning** — atomic tasks with ID, title, goal, assignee, inputs, outputs, code paths, dependencies, parallel group, acceptance criteria, DoD, evidence, risks; per development task a contract ending with a JSON twin; no cycles; no dependencies inside a parallel group; contracts frozen before implementation; same-file tasks not parallel; order: types/interfaces → implementation → integration → tests.
-- **developers** — minimal-fix and executable feedback: read contract, twin, all affected files, callers/tests/types before coding; no unrelated features/refactoring/TODOs/placeholders/debug output/secrets/magic values; update callers and tests; before DONE run build and tests, record command/exit code/summary.
+- **developers** — minimal-fix and executable feedback: read contract, twin, all affected files, callers/tests/types before coding; external docs via `context7`/`fetch`/`ddg-search` with `webfetch` fallback; no unrelated features/refactoring/TODOs/placeholders/debug output/secrets/magic values; update callers and tests; before DONE run build and tests, record command/exit code/summary.
 - **code-reviewer** — delta review: per remark severity (blocker/major/minor/nit), file:line, issue, evidence, risk, fix, verification; per acceptance criterion a row `criterion | met/partial/failed | evidence file:line | remarks`; re-run executable feedback commands (tests/builds only); no source modification; `SECURITY AUDIT REQUIRED` where applicable; failed criterion or blocker/major → `CHANGES_REQUESTED`.
 - **security** — per finding: severity (critical/high/medium/low), file:line, attack scenario, exploitability, impact, concrete fix, OWASP/CWE reference; never approve with critical/high; never modify code; `NEED_INPUT` instead of guessing.
 - **tester** — explicit scope; anchor scenarios to twin acceptance criteria; traceability matrix; report tested/not tested/why; blocking questions; critical/high defects.

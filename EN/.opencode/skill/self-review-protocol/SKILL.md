@@ -11,6 +11,8 @@ Before sending the final reply, perform self-review.
 
 ## Checklist
 
+- If external research was performed: every source has title, URL, access date, and the claim supported; the MCP tool used and any fallback are recorded; no secrets or customer data were sent externally.
+
 - Have all required fields been filled (per the REPLY CONTRACT)?
 - Does the result satisfy the task brief?
 - Are all artifacts created and listed (with `-v<N>` versioning and header template)?

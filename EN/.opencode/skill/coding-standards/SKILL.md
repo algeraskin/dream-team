@@ -10,6 +10,7 @@ For whom: backend-dev, frontend-dev.
 ## Before writing
 
 - Read the contract and its JSON twin fully.
+- If library/framework/API behavior is not evident from the codebase, use `context7` MCP first (if available) for the project-pinned version; use `fetch`/`ddg-search` for official pages and `webfetch` only as a fallback. Cite the source and version in the report.
 - Read every affected file fully before editing it.
 - Find all callers, tests, and type references of changed code.
 - Plan the minimal set of edits (file skeleton) before writing.

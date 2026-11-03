@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
+  webfetch: false
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: 00-requirements/02-final-requirements.md; отчёт scout по суще
 OUTPUTS: 01-analysis/10-functional-requirements.md, 11-nonfunctional-requirements.md, 12-data-flows.md, 13-user-journeys.md, 14-ui-description.md, 15-test-scenarios.md, 00-summary.md; ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;
+- внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;
 - прямые вызовы subagent → subagent запрещены;
 - передача (handoff) только артефактами;
@@ -71,6 +76,7 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 - Включи конкурентный анализ только когда ТЗ называет или подразумевает существующий аналог.
 
 Не выдумывай недостающую информацию.
+- Внешние исследования маршрутизируются через тимлида к researcher; не выходи в интернет самостоятельно.
 Используй NEEDS CLARIFICATION для каждой неразрешённой неоднозначности.
 Каждое требование должно быть проверяемым.
 Новая итерация = новые файлы -v<N>; никогда не перезаписывай предыдущие версии.

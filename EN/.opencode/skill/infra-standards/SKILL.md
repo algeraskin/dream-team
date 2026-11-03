@@ -7,6 +7,13 @@ description: Infrastructure standards for devops — discovery procedure, mandat
 
 For whom: devops.
 
+## Official documentation lookup
+
+- Use `fetch` MCP for known official docs and `ddg-search` MCP for discovery.
+- Use `webfetch` only as a fallback when `fetch` is unavailable.
+- Use `context7` only if the relevant tool/library docs are covered there.
+- Cite the official source, version, and image tag in the infra report; if MCP tools are unavailable, follow local project patterns and state the limitation.
+
 ## Discovery (Step 0, always first)
 
 - Docker (Dockerfile(s), compose files)

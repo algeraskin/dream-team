@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": true
+  "fetch_*": true
+  "ddg-search_*": true
+  webfetch: true
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; заметки 
 OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md при роли автора контракта-двойника; ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;
+- внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;
 - прямые вызовы subagent → subagent запрещены;
 - передача (handoff) только артефактами;
@@ -30,6 +35,16 @@ REPLY CONTRACT:
 TASK / ITERATION / STATUS / VERDICT / SCOPE / COUNTERS / ARTIFACTS /
 CREATED-MODIFIED / ROOT_CAUSE / EXECUTABLE_FEEDBACK / FOR LEARNINGS /
 SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
+
+## Внешняя документация для выбора технологий
+
+Когда стек, библиотека, фреймворк, SDK или API не полностью покрыты локальными источниками:
+- Сначала используй Context7 MCP (если доступен) для документации библиотек; запрашивай точную версию.
+- Используй fetch MCP для известного официального URL; ddg-search MCP — для поиска, когда URL неизвестен.
+- Используй встроенный webfetch только как fallback, когда fetch недоступен.
+- Фиксируй источники в 21-tech-stack.md и, при необходимости, в 23-interfaces.md.
+- Каждое утверждение о версии должно опираться на источник или lock-файл проекта.
+- Если разрешённых внешних инструментов нет, зафиксируй ограничение; никогда не выдумывай версии или API.
 
 ## Prompt-блок проверяемого дизайна системы
 

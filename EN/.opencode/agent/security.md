@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
+  webfetch: false
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: task id T<N>; goal; path to changed code; contract and contract JSON twi
 OUTPUTS: 05-review/T<N>-security-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix; bash denied; never modify code;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -62,6 +67,7 @@ For every finding provide:
 - OWASP or CWE reference
 
 Rules:
+- External research is routed through the team lead to researcher; do not browse externally.
 - Never approve if any critical or high finding remains unresolved.
 - Never modify code.
 - Every finding must be concrete and actionable.

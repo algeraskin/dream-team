@@ -2,12 +2,22 @@
 # ТЗ: Virtual Software Development Team
 ## Мультиагентная система для opencode
 
-**Версия:** 2.7-hybrid  
-**Дата:** 2026-11-03  
+**Версия:** 2.8-hybrid  
+**Дата:** 2026-11-04  
 **Статус:** финальная  
 **Основа:** v2.4 + усиления процессного управления + заимствования из GLM v2.5  
 
 Это единая техническая спецификация агентной системы «виртуальной команды разработки». Файл самодостаточен: на его основе можно с нуля создать аналогичную команду в любом проекте opencode.
+
+## Список изменений v2.8-hybrid
+
+Поиск внешней информации через MCP:
+
+1. Новый §5.22 задаёт политику внешних источников: сначала локальные источники, затем MCP `context7` для документации библиотек/фреймворков/SDK/API, MCP `fetch` для известных URL, MCP `ddg-search` для поиска и встроенный `webfetch` только как fallback для ролей, которым разрешён `fetch`.
+2. Обновлена матрица инструментов: MCP-доступ получают `researcher`, `architect`, `backend-dev`, `frontend-dev` и `devops`. `security` и остальные роли остаются локальными и маршрутизируют внешние вопросы через `researcher`.
+3. Промпты агентов и Приложение A получили блоки MCP-first. Доступность инструментов проверяется агентом во время выполнения; состояние MCP не хранится в `state.json`.
+4. `deploy.sh` теперь настраивает опциональные MCP-серверы `context7`, `fetch` и `ddg-search` в `opencode.json` с идемпотентным merge и флагом `--no-mcp`.
+5. Новые критерии приёмки 63–70 (§13).
 
 ## Список изменений v2.7-hybrid
 
@@ -138,15 +148,17 @@ JSON-двойник контракта с `"security_sensitive": true` план�
 
 | Агент | Разрешено | Запрещено |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` для git- и сервисных команд, `team_checkpoint` | `webfetch`, `lsp` |
-| `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
-| `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, `mcp.context7` / fetch MCP для внешних знаний, `write`, `edit` | `bash`, `task`, `question` |
-| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` только для тестов/сборки | `task`, `question` |
-| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` для git- и сервисных команд, `team_checkpoint` | `webfetch`, MCP `context7`/`fetch`/`ddg-search`, `lsp` |
+| `analyst` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `bash`, `task`, `question` |
+| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, внешние MCP-инструменты, `task`, `question` |
+| `researcher` | `read`, `list`, `glob`, `grep`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback), `write`, `edit` | `bash`, `task`, `question` |
+| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question` |
+| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` только для тестов/сборки | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `integrator` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, MCP `fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question`, MCP `context7`, если явно не включён |
 
 Примечания:
 
@@ -156,6 +168,9 @@ JSON-двойник контракта с `"security_sensitive": true` план�
 4. `bash` ограничен по роли:
    - `code-reviewer`: только тесты/сборка; модификация файлов через bash запрещена;
    - `team-lead`: только git- и сервисные команды.
+5. MCP-инструменты именуются `<server>_<tool>` и входят в матрицу наименьших привилегий. Роли без внешнего доступа должны явно отключать `context7_*`, `fetch_*` и `ddg-search_*` в frontmatter; глобально настроенный MCP-сервер не должен протекать в них.
+6. `webfetch` — fallback для ролей, которым разрешён `fetch`. Использовать его только когда предпочтительный MCP-инструмент недоступен; никогда не предпочитать его доступному MCP-инструменту. Внешний сетевой доступ для исследования запрещено выполнять через `bash`/`curl`/`wget`.
+7. Доступность инструментов проверяется агентом во время выполнения. Не хранить доступность MCP в `state.json` и не проверять MCP-серверы в `/team-setup`.
 
 ---
 
@@ -668,6 +683,9 @@ Evidence: <commands, test results, when applicable>
 - Наименьшие привилегии обязательны.
 - Блок frontmatter `tools:` — единственный источник истины.
 - Файлы агентов могут сужать применимые разрешения или правила, но не ослаблять обязательные ограничения устава.
+- MCP-инструменты (`context7_*`, `fetch_*`, `ddg-search_*`) перечисляются явно в том же блоке. Роль без внешнего доступа устанавливает их в `false`.
+- `webfetch` разрешён только там, где разрешён `fetch`, и только как fallback.
+- Доступность инструментов проверяется во время выполнения; доступность MCP не сохраняется в `state.json`.
 
 ### 5.4. Шлюз безопасности
 
@@ -803,6 +821,7 @@ types/interfaces → implementation → integration → tests
 
 - Секреты — только через переменные окружения и `.env.example`.
 - Данные заказчика не должны отправляться во внешние сервисы без необходимости.
+- Никогда не отправлять секреты, учётные данные, персональные данные или код заказчика во внешние MCP-серверы или на сайты. Внешние запросы должны быть минимальными и публичными.
 - Находки безопасности должны быть конкретными, исполнимыми и с градацией серьёзности.
 
 ### 5.16. Учёт токенов
@@ -853,6 +872,29 @@ security → code-reviewer → tester → architect → unresolvable → custome
 - При `compact_policy: prompt` плагин ничего не компактит: тимлид публикует `[COMPACT]`, заказчик компактит вручную (ctrl+x c); снимок `state.json` при этом всё равно подмешивается в любую ручную компакцию.
 - `tokens.log` и `compaction.log` — read-only для агентов; `.compact-pending.json` транзиентный и агентами не редактируется.
 - После каждой компакции `state.json` и артефакты перечитываются; сводка никогда не считается источником истины.
+### 5.22. Поиск внешней информации и приоритет MCP
+
+Раздел применяется ко всем ролям, выполняющим поиск внешней информации. Локальные источники всегда идут первыми: код, документация проекта, lock-файлы и существующее использование.
+
+Маршрутизация инструментов:
+
+1. `context7` — документация библиотек, фреймворков, SDK, API и инструментов. Определить library ID, затем запросить документацию для точной версии проекта.
+2. `fetch` — известный URL, предпочтительно официальная страница документации или спецификация.
+3. `ddg-search` — поиск, когда URL неизвестен; после него загрузить выбранный результат.
+4. `webfetch` — fallback только для ролей, которым разрешён `fetch`; использовать, когда предпочтительный MCP-инструмент недоступен.
+5. Если ни один разрешённый внешний инструмент недоступен — вернуть `NEED_INPUT` или зафиксировать ограничение. Никогда не выдумывать URL, версии, API или поведение.
+
+Правила:
+
+- Проверять фактический список инструментов в начале задачи; не предполагать, что сервер настроен.
+- Цитировать каждый внешний источник: название, URL, дата обращения и тезис, который он подтверждает.
+- Фиксировать, какой MCP-инструмент использован и потребовался ли fallback.
+- `context7` — не универсальный поисковик; для не-библиотечных страниц использовать `fetch`/`ddg-search`.
+- Не использовать внешние источники для расширения области задачи; только для подтверждения контрактного поведения.
+- Никогда не отправлять секреты, учётные данные, персональные данные или код заказчика во внешние сервисы.
+- Не обходить матрицу инструментов через `bash`, `curl` или `wget` для исследований.
+- `security` и все остальные роли без внешних инструментов маршрутизируют внешние вопросы через тимлида к `researcher`.
+
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
 ---
@@ -900,6 +942,9 @@ EXECUTABLE_FEEDBACK: required | not-applicable
 DO_NOT_TOUCH: <paths outside task scope>
 TEST_COMMAND: <verification command>
 SELF_REVIEW: required
+EXTERNAL_RESEARCH: required | optional | not-needed
+PREFERRED_MCP: context7 | fetch | ddg-search | any | none
+SOURCES_REQUIRED: yes | no
 ```
 
 Обязательные правила:
@@ -910,6 +955,7 @@ SELF_REVIEW: required
 4. Задачи анализа, архитектуры и планирования должны включать `OUTPUT_ARTIFACTS` и `DEFINITION_OF_DONE`.
 5. Задачи тестировщика должны включать `SCOPE`.
 6. Задача не должна запускаться, если её критерии выхода непроверяемы.
+7. Задача с `EXTERNAL_RESEARCH: required` должна включать `SOURCES_REQUIRED: yes` и указывать разрешённые MCP-инструменты в брифе.
 
 ---
 
@@ -1200,6 +1246,8 @@ SIGNAL: STOP | PROCEED
 }
 ```
 
+`deploy.sh` вливает в этот файл опциональные MCP-серверы (`context7`, `fetch`, `ddg-search`); они не обязательны для работы команды. В opencode V2 серверы записываются в `mcp.servers`; в 1.x используется legacy top-level `mcp`. Агенты проверяют доступность во время выполнения и откатываются на `webfetch` или `NEED_INPUT`.
+
 Frontmatter агента должен включать:
 
 - `name`;
@@ -1355,7 +1403,8 @@ Skills:
 2. Выбор технологий:
    - сначала ограничения ТЗ;
    - критерии: свободные лицензии → открытые технологии → производительность → open source → простота сопровождения/масштабирования → зрелость;
-   - не менее двух альтернатив и таблица сравнения по каждому ключевому выбору.
+   - не менее двух альтернатив и таблица сравнения по каждому ключевому выбору;
+   - если нужна внешняя документация, использовать `context7` для документации библиотек/фреймворков/SDK/API, `fetch` для известных официальных URL и `ddg-search` для поиска; `webfetch` — fallback, когда `fetch` недоступен; цитировать источник и версию в `21-tech-stack.md` и, при необходимости, в `23-interfaces.md`.
 3. Модель данных.
 4. Контракты интерфейсов:
    - входы;
@@ -1457,16 +1506,18 @@ Skills:
 
 Порядок источников:
 
-1. Сначала локальные источники: документация проекта, существующее использование.
-2. Официальная документация.
-3. Для документации библиотек — Context7 MCP, если доступен, или конкретные URL через fetch/webfetch.
-4. Официальные репозитории.
-5. Авторитетные ресурсы.
+1. Сначала локальные источники: документация проекта, существующее использование, lock-файлы.
+2. MCP `context7`, если доступен, для документации библиотек/фреймворков/SDK/API/инструментов: определить library ID и запросить точную версию.
+3. MCP `fetch`, если доступен, для известного официального URL или спецификации.
+4. MCP `ddg-search`, если доступен, для поиска URL; затем загрузить выбранный результат.
+5. Официальные репозитории и авторитетные ресурсы.
 6. Проверенные ответы сообщества.
+7. Встроенный `webfetch` только как fallback, когда MCP-инструменты недоступны.
 
 Правила:
 
-- Всегда указывать источники.
+- Всегда указывать источники с названием, URL, датой обращения и подтверждаемым тезисом.
+- Фиксировать, какой MCP-инструмент использован и потребовался ли fallback. Использовать `webfetch` только когда предпочтительный MCP-инструмент недоступен.
 - Проверять, что источник действительно утверждает заявляемое.
 - Никогда не выдумывать URL.
 - Никогда не подавать непроверенную информацию как факт.
@@ -1497,6 +1548,13 @@ Skills:
 - Definition of Done и требования к доказательствам.
 
 Процесс:
+
+Поиск внешней документации:
+
+- Если контракт зависит от поведения библиотеки/фреймворка/API, которого нет в кодовой базе, использовать `context7`, когда доступен, и запрашивать версию, зафиксированную в проекте.
+- Использовать `fetch` для известного официального URL и `ddg-search` для поиска; `webfetch` — fallback, когда `fetch` недоступен.
+- Использовать внешние источники только для подтверждения контрактного поведения, никогда для расширения области задачи.
+- Цитировать источник и версию в отчёте и фиксировать любой fallback.
 
 Перед написанием кода:
 
@@ -1608,6 +1666,7 @@ Skills:
 - Если бэкенд недоступен, использовать моки.
 - Кроссбраузерность/адаптивность согласно NFR.
 - Модульные тесты компонентов/логики.
+- Поиск внешней документации следует `backend-dev`: `context7` для документации UI/фреймворков/библиотек, `fetch`/`ddg-search` для официальных страниц, `webfetch` только как fallback.
 
 Те же правила применяются для:
 
@@ -1969,6 +2028,13 @@ Skills:
 
 Следовать найденным платформам/паттернам.
 
+Поиск документации:
+
+- Использовать `fetch` для известных официальных документов и `ddg-search` для поиска; `webfetch` — fallback, когда `fetch` недоступен.
+- Если `context7` включён для этой роли, использовать его только когда документация соответствующих инструментов/библиотек там покрыта.
+- Цитировать официальный источник, версию и тег образа в infra-отчёте.
+- Если MCP-инструменты недоступны, следовать локальным паттернам проекта и зафиксировать ограничение.
+
 Затем по `infra-standards`:
 
 - Dockerfile(s);
@@ -2142,14 +2208,14 @@ Skills:
 |---|---|---|
 | `team-protocol` | все | Навигатор по уставу и спецификации: task → сопоставление с секциями. Сам skill не содержит правил или схем. |
 | `requirements-protocol` | analyst | Пул требований в стиле PRD, цели продукта, пользовательские истории, метки P0/P1/P2, таблица пула требований, критерии приёмки, дисциплина NEEDS CLARIFICATION. |
-| `architecture-guide` | architect | Порядок выбора технологий, слои/домены DDD, правило следования паттернам в brownfield, тестируемые контракты, режимы отказов, альтернативы, чек-лист качества архитектуры, руководство по JSON-двойникам контрактов. |
+| `architecture-guide` | architect | Порядок выбора технологий, доказательства из документации через MCP (`context7`/`fetch`/`ddg-search`), слои/домены DDD, правило следования паттернам в brownfield, тестируемые контракты, режимы отказов, альтернативы, чек-лист качества архитектуры, руководство по JSON-двойникам контрактов. |
 | `task-dag-protocol` | team-lead, architect | Атомарная декомпозиция, DAG зависимостей, входы/выходы, затрагиваемые области, DoD, доказательства, валидация двойника, безопасность параллельных групп, без циклов. |
 | `review-checklist` | code-reviewer | Спецификация, архитектура/принципы, корректность, безопасность, тесты, читаемость, типовой список дефектов, передача в безопасность, таблица приёмки дельта-ревью, правило вердикта. |
 | `testing-protocol` | tester | Форматы TC и отчётов о багах, категории серьёзности, область тестирования, определение фреймворка, качество автотестов, планирование кейсов, цели покрытия, обработка SIGNAL, матрица трассируемости. |
-| `coding-standards` | backend-dev, frontend-dev | Анализ существующего кода перед написанием, план скелета файла, именование, обработка ошибок, валидация на границах, DI/async, дисциплина минимальных изменений, запрещённые паттерны, рекомендация по размеру файлов, дисциплина исполняемой обратной связи. |
+| `coding-standards` | backend-dev, frontend-dev | Анализ существующего кода перед написанием, поиск внешней документации через MCP, план скелета файла, именование, обработка ошибок, валидация на границах, DI/async, дисциплина минимальных изменений, запрещённые паттерны, рекомендация по размеру файлов, дисциплина исполняемой обратной связи. |
 | `debugging-protocol` | backend-dev, frontend-dev в MODE diagnose | От симптома к первопричине, трассировка пути выполнения, обязательная проверка гипотезы, формат диагностики. |
-| `self-review-protocol` | все | Чек-лист перед ответом, валидация доказательств, подтверждение DoD, подтверждение исполняемой обратной связи, валидация структурированного вывода, никакого DONE без доказательств. |
-| `infra-standards` | devops | Разведка инфраструктуры, обязательные правила, референсные шаблоны Dockerfile/compose/CI/K8s. |
+| `self-review-protocol` | все | Чек-лист перед ответом, валидация источников и fallback для внешнего поиска, валидация доказательств, подтверждение DoD, подтверждение исполняемой обратной связи, валидация структурированного вывода, никакого DONE без доказательств. |
+| `infra-standards` | devops | Разведка инфраструктуры, поиск официальной документации через MCP, обязательные правила, референсные шаблоны Dockerfile/compose/CI/K8s. |
 
 ---
 
@@ -2198,6 +2264,7 @@ AGENTS.md должен содержать:
     - языки;
     - git-политика;
     - безопасность;
+    - поиск внешней информации и приоритет MCP;
     - учёт токенов;
     - контрольные точки шага и компакция;
     - heartbeat;
@@ -2248,6 +2315,8 @@ transfer.sh /path/to/project
 ```bash
 deploy.sh /path/to/project
 ```
+
+`deploy.sh` также вливает опциональные MCP-серверы `context7`, `fetch` и `ddg-search` в целевой `opencode.json` (идемпотентно; `--no-mcp` отключает). MCP опционален: агенты проверяют доступность во время выполнения и откатываются на `webfetch` или `NEED_INPUT`.
 
 Затем:
 
@@ -2381,6 +2450,17 @@ deploy.sh /path/to/project
 60. При `compact_policy: plugin` сессия компактится автоматически на границе шага, снимок `state.json` подмешивается в сводку, а при `after_compaction_auto: true` конвейер продолжается сам с перечитанным `state.json`.
 61. При `compact_policy: prompt` тимлид публикует `[COMPACT]` и ждёт ручной компакции заказчиком.
 62. `compaction.log` и транзиентный маркер `.compact-pending.json` ведёт плагин team-compact, агенты их не редактируют; `/team-status` показывает настройки компакции и последнюю компакцию.
+
+### Внешняя информация и MCP
+
+63. Матрица инструментов в спецификации, уставе и frontmatter агентов совпадает.
+64. `researcher`, `architect`, `backend-dev`, `frontend-dev` и `devops` используют `context7`/`fetch`/`ddg-search` раньше `webfetch`; `webfetch` используется только как fallback.
+65. У `security` нет внешних инструментов; внешние вопросы маршрутизируются через `researcher`.
+66. Каждый внешний источник цитируется с названием, URL, датой обращения и подтверждаемым тезисом.
+67. Если MCP-инструменты недоступны, агент использует `webfetch`, где разрешён, или возвращает `NEED_INPUT`; данные не выдумываются.
+68. Секреты, учётные данные, персональные данные и код заказчика никогда не отправляются во внешние MCP-серверы или на сайты.
+69. Доступность инструментов проверяется агентом во время выполнения; `state.json` не содержит полей доступности MCP.
+70. `deploy.sh` идемпотентно добавляет `context7`, `fetch` и `ddg-search`, сохраняет существующие MCP-серверы и поддерживает `--no-mcp`.
 <!-- ===== end of agent-08.md ===== --><!-- ===== agent-09.md ===== -->
 
 ---
@@ -2400,6 +2480,7 @@ INPUTS: <required artifact paths or state references>
 OUTPUTS: <artifacts and reply fields produced>
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -2518,6 +2599,12 @@ For every contract intended for development:
 - End the contract file with a valid JSON twin.
 - Ensure the twin declares inputs, outputs, acceptance criteria, touches, blocked_by, and security_sensitive.
 
+External documentation:
+- Use Context7 MCP for library/framework/SDK/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the architecture artifacts.
+
 Avoid over-engineering.
 Follow YAGNI.
 Respect existing project patterns in brownfield codebases.
@@ -2568,6 +2655,12 @@ Rules:
 
 ```text
 Implement only the contracted task.
+
+External documentation lookup:
+- Use Context7 MCP for library/framework/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the report.
 
 Before coding:
 - Read the contract fully.
@@ -2739,5 +2832,5 @@ Use empty arrays where there are no items.
 
 ---
 
-Конец agent-team-spec v2.7-hybrid.
+Конец agent-team-spec v2.8-hybrid.
 <!-- ===== end of agent-09.md ===== -->

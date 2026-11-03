@@ -9,8 +9,11 @@ tools:
   grep: true
   write: true
   edit: true
-  bash: false
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
   webfetch: false
+  bash: false
   task: false
   question: false
 ---
@@ -21,6 +24,7 @@ INPUTS: описание запроса/изменения; подсказки �
 OUTPUTS: 01-analysis/30-scout-report-v<N>.md; ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий;
+- внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;
 - прямые вызовы subagent → subagent запрещены;
 - передача (handoff) только артефактами;
@@ -52,6 +56,7 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 - Для каждого пункта отмечай: найдено / не найдено / не существует.
 
 Правила:
+- Внешних исследований нет; единственный источник — кодовая база.
 - Без анализа.
 - Без рекомендаций.
 - Без изменений кода.

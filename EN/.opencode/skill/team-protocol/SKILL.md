@@ -11,6 +11,7 @@ This skill is a navigator: it contains no rules or schemas itself — it maps ta
 |---|---|
 | Roles, hierarchy, interaction rules, security gate | AGENTS.md §2–3; spec §2 |
 | Tool matrix (who may use what) | AGENTS.md §4; spec §2.1 |
+| External information, MCP preference, webfetch fallback | AGENTS.md §4, §14; spec §2.1, §5.22 |
 | Request types and pipelines | AGENTS.md §5; spec §2.2 |
 | Pipeline steps and quality gates | AGENTS.md §6; spec §3 |
 | Step checkpoints and session compaction | AGENTS.md §6.1; spec §3.5, §5.21 |

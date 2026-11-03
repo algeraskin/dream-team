@@ -1,6 +1,6 @@
 # Чартер команды — Virtual Software Development Team
 
-Полная спецификация: `agent-team-spec.md` (v2.7-hybrid). Чартер обязателен для всех агентов. При конфликте между чартером и файлом агента обязательные ограничения чартера имеют приоритет; файл агента может сужать права и правила, но не ослаблять их.
+Полная спецификация: `agent-team-spec.md` (v2.8-hybrid). Чартер обязателен для всех агентов. При конфликте между чартером и файлом агента обязательные ограничения чартера имеют приоритет; файл агента может сужать права и правила, но не ослаблять их.
 
 ## 1. Назначение
 
@@ -44,17 +44,19 @@
 
 | Агент | Разрешено | Запрещено |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (только git и сервисные команды), `team_checkpoint` | `webfetch`, `lsp` |
-| `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
-| `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, MCP fetch/context7 для внешних знаний, `write`, `edit` | `bash`, `task`, `question` |
-| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` (только тесты/сборка) | `task`, `question` |
-| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (только git и сервисные команды), `team_checkpoint` | `webfetch`, MCP `context7`/`fetch`/`ddg-search`, `lsp` |
+| `analyst` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `bash`, `task`, `question` |
+| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, внешние MCP-инструменты, `task`, `question` |
+| `researcher` | `read`, `list`, `glob`, `grep`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback), `write`, `edit` | `bash`, `task`, `question` |
+| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question` |
+| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` (только тесты/сборка) | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `integrator` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question`, `webfetch`, внешние MCP-инструменты |
+| `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, MCP `fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question`, MCP `context7`, если явно не включён |
 
-Примечания: `question` и `team_checkpoint` принадлежат только `team-lead` и отключены у всех субагентов. `bash` ограничен ролью: `code-reviewer` — только тесты/сборка; `team-lead` — только git и сервисные команды.
+Примечания: `question` и `team_checkpoint` принадлежат только `team-lead` и отключены у всех субагентов. `bash` ограничен ролью: `code-reviewer` — только тесты/сборка; `team-lead` — только git и сервисные команды. MCP-инструменты именуются `<server>_<tool>`; роли без внешнего доступа явно отключают `context7_*`, `fetch_*` и `ddg-search_*`. `webfetch` — fallback для ролей с `fetch`; доступность инструментов проверяется во время выполнения и не хранится в `state.json`.
 
 ## 5. Типы запросов и пайплайны
 
@@ -218,7 +220,8 @@ Executable feedback
 - **Очистка**: после сдачи удалить черновики и старые версии `-v<N>`; финальные версии хранятся в `00–07`, итоги — в `08-delivery`.
 - **Языки**: промпты, артефакты, общение — на русском; идентификаторы и комментарии в коде — на английском; автотесты используют тестовый фреймворк проекта; Python/pytest — по умолчанию для greenfield.
 - **Git-политика**: базовая ветка `main` (иначе `master` или названная заказчиком); на каждый запрос — своя рабочая ветка от актуальной базы; имя ветки предлагает team-lead, заказчик принимает; коммиты делает team-lead с префиксом `[team]: <фаза> — <что>`; субагенты не выполняют git-операции без указания; слияние в базу — только после приёмки сдачи решением заказчика; ветки фиксируются в `state.json → git`.
-- **Правила безопасности**: секреты только через переменные окружения и `.env.example`; без необходимости не передавать данные заказчика внешним сервисам; находки конкретные, действенные, с градацией серьёзности.
+- **Правила безопасности**: секреты только через переменные окружения и `.env.example`; без необходимости не передавать данные заказчика внешним сервисам; никогда не отправлять секреты, учётные данные, персональные данные или код заказчика во внешние MCP-серверы или на сайты; находки конкретные, действенные, с градацией серьёзности.
+- **Внешняя информация и MCP**: сначала локальные источники; затем `context7` для документации библиотек/фреймворков/SDK/API, `fetch` для известных URL, `ddg-search` для поиска; `webfetch` — fallback только там, где разрешён `fetch`. Цитировать каждый источник (название, URL, дата обращения, тезис), фиксировать использованный инструмент и fallback, не выдумывать URL и версии, не обходить матрицу через `bash`/`curl`/`wget`. `security` и другие роли без внешних инструментов маршрутизируют вопросы через `researcher`. `deploy.sh` настраивает опциональные MCP-серверы; доступность проверяется во время выполнения и никогда не сохраняется в `state.json`.
 - **Учёт токенов**: плагин team-tokens ведёт `tokens.log`; агенты его никогда не редактируют; статистику показывает `/team-tokens-used`.
 - **Контрольные точки и компакция**: после каждого шага пайплайна team-lead фиксирует контрольную точку через `team_checkpoint` и управляет компакцией сессии согласно `settings.compact_policy` (§6.1); после каждой компакции `state.json` и артефакты перечитываются.
 - **Heartbeat**: когда `settings.heartbeat` включён, длинные отчёты разработчиков создаются как заготовки в начале задачи и дополняются по мере завершения разделов.
@@ -245,9 +248,9 @@ EXPECTED ARTIFACTS: <пути, которые агент должен созда
 
 Только для tester: `SCOPE: changed | full`, `SIGNAL: STOP | PROCEED` (только при повторном запуске после QUESTION тестировщика).
 
-Дополнительные поля: `INPUT_ARTIFACTS`, `OUTPUT_ARTIFACTS`, `DEFINITION_OF_DONE`, `EVIDENCE_REQUIRED`, `ACCEPTANCE_CRITERIA` (дословно из двойника), `EXECUTABLE_FEEDBACK: required | not-applicable`, `DO_NOT_TOUCH`, `TEST_COMMAND`, `SELF_REVIEW: required`.
+Дополнительные поля: `INPUT_ARTIFACTS`, `OUTPUT_ARTIFACTS`, `DEFINITION_OF_DONE`, `EVIDENCE_REQUIRED`, `ACCEPTANCE_CRITERIA` (дословно из двойника), `EXECUTABLE_FEEDBACK: required | not-applicable`, `DO_NOT_TOUCH`, `TEST_COMMAND`, `SELF_REVIEW: required`, `EXTERNAL_RESEARCH: required | optional | not-needed`, `PREFERRED_MCP: context7 | fetch | ddg-search | any | none`, `SOURCES_REQUIRED: yes | no`.
 
-Обязательно: задачи разработки содержат `DEFINITION_OF_DONE` и `EVIDENCE_REQUIRED`; задачи разработчика full/rework содержат `EXECUTABLE_FEEDBACK: required`; брифы ревьюера/тестировщика содержат дословные `ACCEPTANCE_CRITERIA`; задачи анализа/архитектуры/планирования содержат `OUTPUT_ARTIFACTS` и `DEFINITION_OF_DONE`; задачи тестировщика содержат `SCOPE`; задачи с нетестируемыми критериями выхода не запускаются.
+Обязательно: задачи разработки содержат `DEFINITION_OF_DONE` и `EVIDENCE_REQUIRED`; задачи разработчика full/rework содержат `EXECUTABLE_FEEDBACK: required`; брифы ревьюера/тестировщика содержат дословные `ACCEPTANCE_CRITERIA`; задачи анализа/архитектуры/планирования содержат `OUTPUT_ARTIFACTS` и `DEFINITION_OF_DONE`; задачи тестировщика содержат `SCOPE`; задачи с `EXTERNAL_RESEARCH: required` содержат `SOURCES_REQUIRED: yes` и разрешённые MCP-инструменты; задачи с нетестируемыми критериями выхода не запускаются.
 
 ### 15.2. Формат ответа субагента
 
@@ -307,6 +310,7 @@ INPUTS: <обязательные пути артефактов или ссыл�
 OUTPUTS: <артефакты и поля ответа, которые производит агент>
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -322,9 +326,9 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 
 - **team-lead** — дисциплина Observe–Think–Act перед диспетчеризацией (прочитать state.json, артефакты, шлюзы, flow, learnings, hints; определить цель, входы, критерии выхода; не запускать нетестируемые задачи и задачи с отсутствующими/невалидными двойниками; собрать бриф, дословно процитировать критерии приёмки, опубликовать уведомления, зафиксировать решение).
 - **analyst** — требования в стиле PRD: Background/Business Goal, In/Out of Scope, Personas, User Stories, FR (стабильный ID, Must/Should/Could, критерии приёмки, тестируемость, ссылка на источник), NFR, Journeys, Exception Flows, Data/Integration Needs, Assumptions, Constraints, Glossary, Open Questions, Requirement Pool; для full-project: ≤5 измеримых продуктовых целей, истории P0/P1/P2, таблица пула `requirement | source | priority | effort S/M/L | risk | FR ID`; без выдумок, `NEEDS CLARIFICATION` для неоднозначностей.
-- **architect** — тестируемый дизайн: контекстная диаграмма, границы, ответственности, стек с альтернативами, модель данных, контракты интерфейсов (входы/выходы/ошибки/валидация/идемпотентность), модель ошибок, меры безопасности, деплой, режимы отказа, миграционные заметки; контракты заканчиваются валидными JSON-двойниками; YAGNI; brownfield следует существующим паттернам.
+- **architect** — тестируемый дизайн: контекстная диаграмма, границы, ответственности, стек с альтернативами, модель данных, контракты интерфейсов (входы/выходы/ошибки/валидация/идемпотентность), модель ошибок, меры безопасности, деплой, режимы отказа, миграционные заметки; контракты заканчиваются валидными JSON-двойниками; внешняя документация через `context7`/`fetch`/`ddg-search` с fallback на `webfetch`; YAGNI; brownfield следует существующим паттернам.
 - **planning** — атомарные задачи с ID, названием, целью, исполнителем, входами, выходами, путями кода, зависимостями, параллельной группой, критериями приёмки, DoD, доказательствами, рисками; на каждую задачу разработки — контракт с JSON-двойником в конце; без циклов; без зависимостей внутри параллельной группы; контракты заморожены до реализации; задачи одного файла — не параллельно; порядок: типы/интерфейсы → реализация → интеграция → тесты.
-- **разработчики** — minimal-fix и исполняемая обратная связь: прочитать контракт, двойника, все затронутые файлы, вызывающих/тесты/типы до кодирования; без посторонних функций/рефакторинга/TODO/заглушек/отладочного вывода/секретов/магических значений; обновить вызывающих и тесты; перед DONE запустить сборку и тесты, записать команду/код выхода/итог.
+- **разработчики** — minimal-fix и исполняемая обратная связь: прочитать контракт, двойника, все затронутые файлы, вызывающих/тесты/типы до кодирования; внешняя документация через `context7`/`fetch`/`ddg-search` с fallback на `webfetch`; без посторонних функций/рефакторинга/TODO/заглушек/отладочного вывода/секретов/магических значений; обновить вызывающих и тесты; перед DONE запустить сборку и тесты, записать команду/код выхода/итог.
 - **code-reviewer** — дельта-ревью: по каждому замечанию серьёзность (blocker/major/minor/nit), file:line, суть, доказательство, риск, исправление, способ проверки; по каждому критерию приёмки строка `criterion | met/partial/failed | evidence file:line | remarks`; повторно запустить команды исполняемой обратной связи (только тесты/сборка); не модифицировать исходники; `SECURITY AUDIT REQUIRED`, где применимо; проваленный критерий или blocker/major → `CHANGES_REQUESTED`.
 - **security** — по каждой находке: серьёзность (critical/high/medium/low), file:line, сценарий атаки, эксплуатируемость, воздействие, конкретное исправление, ссылка на OWASP/CWE; никогда не одобрять при критических/высоких; никогда не менять код; `NEED_INPUT` вместо догадок.
 - **tester** — явный scope; привязка сценариев к критериям приёмки двойников; матрица трассируемости; в отчёте — протестировано/не протестировано/почему; блокирующие вопросы; критические/высокие дефекты.

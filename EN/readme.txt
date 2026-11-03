@@ -1,5 +1,5 @@
 VIRTUAL SOFTWARE DEVELOPMENT TEAM
-Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.7-hybrid)
+Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.8-hybrid)
 
 ================================================================================
 WHAT THIS IS
@@ -25,6 +25,8 @@ Key mechanisms:
     DB queries go through the security auditor;
   - least-privilege tool matrix — each agent can use only its role's tools;
     only the team-lead talks to the customer;
+  - MCP-first external research — context7/fetch/ddg-search when available,
+    webfetch as a fallback, and cited sources;
   - handoff by artifact — all exchanges go through versioned markdown
     artifacts in the workspace, never chat-only;
   - token accounting plugin and git policy (own working branch per request,
@@ -62,13 +64,61 @@ Deploying to another project:
     ./deploy.sh <target-dir> --force    # overwrite existing team files (backed up)
     ./deploy.sh <target-dir> --no-charter --no-spec
     ./deploy.sh <target-dir> --with-default-agent
+    ./deploy.sh <target-dir> --no-mcp   # do not configure MCP servers
     ./deploy.sh -h                      # full help
 
   It installs the team files, merges `instructions: += AGENTS.md` into the
   target opencode.json (never overwriting it; the charter becomes
-  AGENTS-team.md if the target already has its own AGENTS.md), and verifies
-  the result. Existing team-workspace/, tokens.log and compaction.log in the
-  target are never touched.
+  AGENTS-team.md if the target already has its own AGENTS.md), configures
+  optional MCP servers, and verifies the result. Existing
+  team-workspace/, tokens.log and compaction.log in the target are never
+  touched.
+
+MCP servers (optional)
+  By default deploy.sh adds three MCP servers to opencode.json, preserving
+  any existing entries with the same names:
+
+    context7    remote, https://mcp.context7.com/mcp
+                optional header CONTEXT7_API_KEY={env:CONTEXT7_API_KEY};
+                works anonymously at lower rate limits.
+    fetch       local, uvx mcp-server-fetch
+    ddg-search  local, uvx duckduckgo-mcp-server
+
+  Requirements: python3 for the idempotent JSON merge; uv/uvx for the local
+  fetch and ddg-search servers. If uvx is missing, deploy.sh adds context7,
+  skips the local servers, and prints a warning. Use --no-mcp to skip MCP
+  configuration entirely. The config shape follows the installed opencode:
+  V2 uses mcp.servers; opencode 1.x uses top-level mcp.
+
+  Context7 API key
+    1. Create a free key: https://context7.com/dashboard
+    2. Export it in the environment that starts opencode:
+         export CONTEXT7_API_KEY="ctx7sk-..."
+       For a persistent setup on macOS/zsh, add the export to ~/.zshrc;
+       on Linux/bash, add it to ~/.bashrc. Restart the terminal.
+       Or start opencode for one session:
+         CONTEXT7_API_KEY="ctx7sk-..." opencode
+    3. Verify without printing the key:
+         test -n "$CONTEXT7_API_KEY" && echo "CONTEXT7_API_KEY is set"
+         opencode mcp list
+       context7 should show "connected".
+    4. deploy.sh writes CONTEXT7_API_KEY={env:CONTEXT7_API_KEY} into
+       opencode.json and never stores the key itself. Set the variable
+       before starting opencode, not only before running deploy.sh.
+    5. Without a key, context7 works anonymously at lower rate limits;
+       the other MCP tools and the webfetch fallback are unaffected.
+  Security: never commit the key, never put it directly into opencode.json,
+  and do not share it in artifacts or reports.
+
+  Agents check MCP availability at runtime. When context7/fetch/ddg-search
+  are absent, they fall back to webfetch (where the role is allowed) and
+  then to NEED_INPUT; no MCP state is written to state.json.
+
+  Roles with external access:
+    researcher, architect, backend-dev, frontend-dev, devops (fetch/ddg;
+    context7 optional), with webfetch as a fallback for every role that has
+    fetch. security and all other roles are local-only and route external
+    questions through researcher.
 
 Maintaining deploy.sh (repo root):
   The embedded copies of the team files (the payload after "exit 0" in

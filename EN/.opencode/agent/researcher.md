@@ -7,9 +7,12 @@ tools:
   list: true
   glob: true
   grep: true
-  webfetch: true
   write: true
   edit: true
+  "context7_*": true
+  "fetch_*": true
+  "ddg-search_*": true
+  webfetch: true
   bash: false
   task: false
   question: false
@@ -21,6 +24,7 @@ INPUTS: question; project context; stack and versions; ToR/architecture constrai
 OUTPUTS: 01-analysis/31-research-notes-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -33,16 +37,18 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 
 ## Source order
 
-1. Local sources first: project docs, existing usage.
-2. Official documentation.
-3. For library docs, Context7 MCP when available, or specific URLs via fetch/webfetch.
-4. Official repositories.
-5. Reputable resources.
+1. Local sources first: project docs, existing usage, lockfiles.
+2. Context7 MCP, when available, for library/framework/SDK/API/tool docs: resolve the library ID and query the exact version.
+3. Fetch MCP, when available, for a known official URL or specification.
+4. ddg-search MCP, when available, to discover a URL; then fetch the selected result.
+5. Official repositories and reputable resources.
 6. Verified community answers.
+7. Built-in webfetch only as a fallback when the MCP tools are unavailable.
 
 ## Rules
 
-- Always cite fetched sources.
+- Always cite fetched sources with title, URL, access date, and the claim supported.
+- Record which MCP tool was used and whether a fallback was required. Use webfetch only when the preferred MCP tool is unavailable.
 - Verify the source actually states the claim.
 - Never invent URLs.
 - Never present unverified information as fact.

@@ -2,12 +2,22 @@
 # ToR: Virtual Software Development Team
 ## Multi-agent system for opencode
 
-**Version:** 2.7-hybrid  
-**Date:** 2026-11-03  
+**Version:** 2.8-hybrid  
+**Date:** 2026-11-04  
 **Status:** final  
 **Base:** v2.4 + process governance enhancements + GLM v2.5 borrowings  
 
 This is the unified technical specification for the “virtual development team” agent system. The file is self-contained: an analogous team can be created from it in any opencode project from scratch.
+
+## Changelog v2.8-hybrid
+
+External information sourcing through MCP:
+
+1. New §5.22 defines the external-source policy: local sources first, then MCP `context7` for library/framework/SDK/API documentation, MCP `fetch` for known URLs, MCP `ddg-search` for discovery, and built-in `webfetch` only as a fallback for roles that are granted `fetch`.
+2. The tool matrix is updated: `researcher`, `architect`, `backend-dev`, `frontend-dev`, and `devops` receive MCP access. `security` and the remaining roles stay local-only and route external questions through `researcher`.
+3. Agent prompts and Appendix A receive MCP-first lookup blocks. Tool availability is checked at runtime by each agent; no MCP state is stored in `state.json`.
+4. `deploy.sh` now configures optional `context7`, `fetch`, and `ddg-search` MCP servers in `opencode.json` with an idempotent merge and a `--no-mcp` opt-out.
+5. New acceptance criteria 63–70 (§13).
 
 ## Changelog v2.7-hybrid
 
@@ -138,15 +148,17 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 | Agent | Allowed | Denied |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands, `team_checkpoint` | `webfetch`, `lsp` |
-| `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
-| `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, `mcp.context7` / fetch MCP for external knowledge, `write`, `edit` | `bash`, `task`, `question` |
-| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` for tests/builds only | `task`, `question` |
-| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands, `team_checkpoint` | `webfetch`, MCP `context7`/`fetch`/`ddg-search`, `lsp` |
+| `analyst` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `bash`, `task`, `question` |
+| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, MCP external tools, `task`, `question` |
+| `researcher` | `read`, `list`, `glob`, `grep`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback), `write`, `edit` | `bash`, `task`, `question` |
+| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question` |
+| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` for tests/builds only | `task`, `question`, `webfetch`, MCP external tools |
+| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question`, `webfetch`, MCP external tools |
+| `integrator` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question`, `webfetch`, MCP external tools |
+| `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, MCP `fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question`, MCP `context7` unless explicitly enabled |
 
 Notes:
 
@@ -156,6 +168,9 @@ Notes:
 4. `bash` is role-scoped:
    - `code-reviewer`: tests/builds only; file modification via bash is forbidden;
    - `team-lead`: git and service commands only.
+5. MCP tools are named `<server>_<tool>` and are part of the least-privilege matrix. Roles without external access must explicitly disable `context7_*`, `fetch_*`, and `ddg-search_*` in frontmatter; a globally configured MCP server must not leak into them.
+6. `webfetch` is a fallback for roles that are granted `fetch`. Use it only when the preferred MCP tool is unavailable; never prefer it over an available MCP tool. External network access for research must not be performed through `bash`/`curl`/`wget`.
+7. Tool availability is checked at runtime by the agent. Do not store MCP availability in `state.json` and do not probe MCP servers during `/team-setup`.
 
 ---
 
@@ -668,6 +683,9 @@ Rules:
 - Least privilege is mandatory.
 - The frontmatter `tools:` block is the single source of truth.
 - Agent files may narrow applicable permissions or rules, but not weaken mandatory charter constraints.
+- MCP tools (`context7_*`, `fetch_*`, `ddg-search_*`) are listed explicitly in the same block. A role without external access sets them to `false`.
+- `webfetch` is allowed only where `fetch` is allowed, and only as a fallback.
+- Tool availability is checked at runtime; no MCP availability is persisted in `state.json`.
 
 ### 5.4. Security gate
 
@@ -803,6 +821,7 @@ Similar bug patterns found outside the task are reported, not fixed.
 
 - Secrets only via environment variables and `.env.example`.
 - Customer data must not be sent to external services without necessity.
+- Never send secrets, credentials, personal data, or customer code to external MCP servers or websites. External queries must be minimal and public.
 - Security findings must be concrete, actionable, and severity-graded.
 
 ### 5.16. Token accounting
@@ -853,6 +872,29 @@ After delivery:
 - With `compact_policy: prompt` the plugin compacts nothing: the team lead publishes `[COMPACT]` and the customer compacts manually (ctrl+x c); the `state.json` snapshot is still injected into any manual compaction.
 - `tokens.log` and `compaction.log` are read-only for agents; `.compact-pending.json` is transient and never edited by agents.
 - After every compaction, `state.json` and artifacts are re-read; the summary is never treated as a source of truth.
+### 5.22. External information sourcing and MCP preference
+
+This section applies to every role that performs external information search. Local sources always come first: code, project documentation, lockfiles, and existing usage.
+
+Tool routing:
+
+1. `context7` — library, framework, SDK, API, and tool documentation. Resolve the library ID, then query the docs for the exact project version.
+2. `fetch` — a known URL, preferably an official documentation page or specification.
+3. `ddg-search` — discovery when the URL is unknown; fetch the selected result afterward.
+4. `webfetch` — fallback only for roles that are granted `fetch`; use it when the preferred MCP tool is unavailable.
+5. If no permitted external tool is available, report `NEED_INPUT` or record the limitation. Never invent URLs, versions, APIs, or behavior.
+
+Rules:
+
+- Check the actual tool list at task start; do not assume a server is configured.
+- Cite every external source: title, URL, access date, and the claim it supports.
+- Record which MCP tool was used and whether a fallback was required.
+- `context7` is not a general-purpose search engine; use `fetch`/`ddg-search` for non-library pages.
+- Do not use external sources to expand the task scope; use them only to confirm contracted behavior.
+- Never send secrets, credentials, personal data, or customer code to external services.
+- Do not bypass the tool matrix with `bash`, `curl`, or `wget` for research.
+- `security` and all other roles without external tools route external questions through the team lead to `researcher`.
+
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
 ---
@@ -900,6 +942,9 @@ EXECUTABLE_FEEDBACK: required | not-applicable
 DO_NOT_TOUCH: <paths outside task scope>
 TEST_COMMAND: <verification command>
 SELF_REVIEW: required
+EXTERNAL_RESEARCH: required | optional | not-needed
+PREFERRED_MCP: context7 | fetch | ddg-search | any | none
+SOURCES_REQUIRED: yes | no
 ```
 
 Mandatory rules:
@@ -910,6 +955,7 @@ Mandatory rules:
 4. Analysis, architecture, and planning tasks must include `OUTPUT_ARTIFACTS` and `DEFINITION_OF_DONE`.
 5. Tester tasks must include `SCOPE`.
 6. A task must not be dispatched if its exit criteria are not testable.
+7. A task with `EXTERNAL_RESEARCH: required` must include `SOURCES_REQUIRED: yes` and name the permitted MCP tools in the brief.
 
 ---
 
@@ -1201,6 +1247,8 @@ A decision card must always contain:
 }
 ```
 
+`deploy.sh` merges optional MCP servers (`context7`, `fetch`, `ddg-search`) into this file; they are not required for the team to run. On opencode V2 the servers are written under `mcp.servers`; on 1.x the legacy top-level `mcp` map is used. Agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
+
 Agent frontmatter must include:
 
 - `name`;
@@ -1356,7 +1404,8 @@ Process:
 2. Technology selection:
    - respect ToR constraints first;
    - criteria: free licenses → open technologies → performance → open source → ease of maintenance/scaling → maturity;
-   - at least two alternatives and a comparison table per key choice.
+   - at least two alternatives and a comparison table per key choice;
+   - when external documentation is needed, use `context7` for library/framework/SDK/API docs, `fetch` for known official URLs, and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is missing; cite the source and version in `21-tech-stack.md` and, when relevant, `23-interfaces.md`.
 3. Data model.
 4. Interface contracts:
    - inputs;
@@ -1458,16 +1507,18 @@ Process:
 
 Source order:
 
-1. Local sources first: project docs, existing usage.
-2. Official documentation.
-3. For library docs, Context7 MCP when available, or specific URLs via fetch/webfetch.
-4. Official repositories.
-5. Reputable resources.
+1. Local sources first: project docs, existing usage, lockfiles.
+2. `context7` MCP, when available, for library/framework/SDK/API/tool docs: resolve the library ID and query the exact version.
+3. `fetch` MCP, when available, for a known official URL or specification.
+4. `ddg-search` MCP, when available, to discover a URL; then fetch the selected result.
+5. Official repositories and reputable resources.
 6. Verified community answers.
+7. Built-in `webfetch` only as a fallback when the MCP tools are unavailable.
 
 Rules:
 
-- Always cite fetched sources.
+- Always cite fetched sources with title, URL, access date, and the claim supported.
+- Record which MCP tool was used and whether a fallback was required.
 - Verify the source actually states the claim.
 - Never invent URLs.
 - Never present unverified information as fact.
@@ -1498,6 +1549,13 @@ Input:
 - Definition of Done and evidence requirements.
 
 Process:
+
+External documentation lookup:
+
+- If the contract depends on library/framework/API behavior not evident from the codebase, use `context7` when available and query the project-pinned version.
+- Use `fetch` for a known official URL and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is unavailable.
+- Use external sources only to confirm contracted behavior, never to expand scope.
+- Cite the source and version in the report and state any fallback.
 
 Before coding:
 
@@ -1609,6 +1667,7 @@ Additional duties:
 - If backend is unavailable, use mocks.
 - Cross-browser/responsiveness per NFRs.
 - Component/logic unit tests.
+- External documentation lookup follows `backend-dev`: `context7` for UI/framework/library docs, `fetch`/`ddg-search` for official pages, `webfetch` only as a fallback.
 
 The same rules apply for:
 
@@ -1970,6 +2029,13 @@ Step 0 — discovery:
 
 Follow found platforms/patterns.
 
+Documentation lookup:
+
+- Use `fetch` for known official docs and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is unavailable.
+- If `context7` is enabled for this role, use it only when the relevant tool/library docs are covered there.
+- Cite the official source, version, and image tag in the infra report.
+- If MCP tools are unavailable, follow local project patterns and state the limitation.
+
 Then per `infra-standards`:
 
 - Dockerfile(s);
@@ -2143,14 +2209,14 @@ The journal is read-only.
 |---|---|---|
 | `team-protocol` | all | Navigator for the charter and spec: task → section mapping. The skill itself contains no rules or schemas. |
 | `requirements-protocol` | analyst | PRD-style requirement pool, product goals, user stories, P0/P1/P2 tags, requirement pool table, acceptance criteria, NEEDS CLARIFICATION discipline. |
-| `architecture-guide` | architect | Technology selection order, DDD layers/domains, brownfield pattern-following rule, testable contracts, failure modes, alternatives, architecture quality checklist, contract twin guidance. |
+| `architecture-guide` | architect | Technology selection order, documentation evidence via MCP (`context7`/`fetch`/`ddg-search`), DDD layers/domains, brownfield pattern-following rule, testable contracts, failure modes, alternatives, architecture quality checklist, contract twin guidance. |
 | `task-dag-protocol` | team-lead, architect | Atomic decomposition, dependency DAG, inputs/outputs, touched areas, DoD, evidence, twin validation, parallel group safety, no cycles. |
 | `review-checklist` | code-reviewer | Specification, architecture/principles, correctness, security, tests, readability, typical-defect watchlist, security handoff, delta review acceptance table, verdict rule. |
 | `testing-protocol` | tester | TC and bug-report formats, severity categories, testing scope, framework discovery, autotest quality, case planning, coverage targets, SIGNAL handling, traceability matrix. |
-| `coding-standards` | backend-dev, frontend-dev | Analyzing existing code before writing, file-skeleton plan, naming, error handling, boundary validation, DI/async, minimal-fix discipline, forbidden patterns, file size guideline, executable feedback discipline. |
+| `coding-standards` | backend-dev, frontend-dev | Analyzing existing code before writing, external documentation lookup via MCP, file-skeleton plan, naming, error handling, boundary validation, DI/async, minimal-fix discipline, forbidden patterns, file size guideline, executable feedback discipline. |
 | `debugging-protocol` | backend-dev, frontend-dev in MODE diagnose | From symptom to root cause, execution path tracing, mandatory hypothesis verification, diagnosis format. |
-| `self-review-protocol` | all | Checklist before reply, evidence validation, DoD confirmation, executable feedback confirmation, structured output validation, no DONE without proof. |
-| `infra-standards` | devops | Infrastructure discovery, mandatory rules, reference Dockerfile/compose/CI/K8s templates. |
+| `self-review-protocol` | all | Checklist before reply, source and fallback validation for external research, evidence validation, DoD confirmation, executable feedback confirmation, structured output validation, no DONE without proof. |
+| `infra-standards` | devops | Infrastructure discovery, official documentation lookup via MCP, mandatory rules, reference Dockerfile/compose/CI/K8s templates. |
 
 ---
 
@@ -2199,6 +2265,7 @@ AGENTS.md must contain:
     - languages;
     - git policy;
     - security;
+    - external information sourcing and MCP preference;
     - token accounting;
     - step checkpoints and compaction;
     - heartbeat;
@@ -2249,6 +2316,8 @@ Without access to the source tree:
 ```bash
 deploy.sh /path/to/project
 ```
+
+`deploy.sh` also merges the optional MCP servers `context7`, `fetch`, and `ddg-search` into the target `opencode.json` (idempotent; `--no-mcp` opts out). MCP is optional: agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
 
 Then:
 
@@ -2382,6 +2451,17 @@ Then:
 60. With `compact_policy: plugin` the session compacts automatically at the step boundary, a `state.json` snapshot is injected into the summary, and with `after_compaction_auto: true` the pipeline continues by itself with a fresh `state.json` read.
 61. With `compact_policy: prompt` the team lead publishes `[COMPACT]` and waits for the customer to compact manually.
 62. `compaction.log` and the transient marker `.compact-pending.json` are maintained by the team-compact plugin and never edited by agents; `/team-status` shows the compaction settings and the last compaction.
+
+### External information and MCP
+
+63. The tool matrix in the specification, charter, and agent frontmatter is identical.
+64. `researcher`, `architect`, `backend-dev`, `frontend-dev`, and `devops` use `context7`/`fetch`/`ddg-search` before `webfetch`; `webfetch` is used only as a fallback.
+65. `security` has no external tools; external questions are routed through `researcher`.
+66. Every external source is cited with title, URL, access date, and the claim supported.
+67. When MCP tools are unavailable, an agent uses `webfetch` where permitted or returns `NEED_INPUT`; it does not invent data.
+68. Secrets, credentials, personal data, and customer code are never sent to external MCP servers or websites.
+69. Tool availability is checked by the agent at runtime; `state.json` contains no MCP availability fields.
+70. `deploy.sh` adds `context7`, `fetch`, and `ddg-search` idempotently, preserves existing MCP servers, and supports `--no-mcp`.
 <!-- ===== end of agent-08.md ===== --><!-- ===== agent-09.md ===== -->
 
 ---
@@ -2401,6 +2481,7 @@ INPUTS: <required artifact paths or state references>
 OUTPUTS: <artifacts and reply fields produced>
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -2519,6 +2600,12 @@ For every contract intended for development:
 - End the contract file with a valid JSON twin.
 - Ensure the twin declares inputs, outputs, acceptance criteria, touches, blocked_by, and security_sensitive.
 
+External documentation:
+- Use Context7 MCP for library/framework/SDK/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the architecture artifacts.
+
 Avoid over-engineering.
 Follow YAGNI.
 Respect existing project patterns in brownfield codebases.
@@ -2569,6 +2656,12 @@ Rules:
 
 ```text
 Implement only the contracted task.
+
+External documentation lookup:
+- Use Context7 MCP for library/framework/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the report.
 
 Before coding:
 - Read the contract fully.
@@ -2740,5 +2833,5 @@ Use empty arrays where there are no items.
 
 ---
 
-End of agent-team-spec v2.7-hybrid.
+End of agent-team-spec v2.8-hybrid.
 <!-- ===== end of agent-09.md ===== -->

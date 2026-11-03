@@ -9,8 +9,11 @@ tools:
   grep: true
   write: true
   edit: true
-  bash: false
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
   webfetch: false
+  bash: false
   task: false
   question: false
 ---
@@ -21,6 +24,7 @@ INPUTS: request/change description; scope hints if available
 OUTPUTS: 01-analysis/30-scout-report-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -52,6 +56,7 @@ Execution:
 - Mark each item found / not found / does not exist.
 
 Rules:
+- No external research; the codebase is the only source.
 - No analysis.
 - No recommendations.
 - No code changes.

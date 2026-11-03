@@ -10,6 +10,10 @@ tools:
   lsp: true
   write: true
   edit: true
+  "context7_*": false
+  "fetch_*": false
+  "ddg-search_*": false
+  webfetch: false
   bash: false
   task: false
   question: false
@@ -21,6 +25,7 @@ INPUTS: id задачи T<N>; цель; путь к изменённому ко�
 OUTPUTS: 05-review/T<N>-security-v<N>.md; ответ по REPLY CONTRACT
 CONSTRAINTS:
 - матрица инструментов наименьших привилегий; bash запрещён; никогда не изменяй код;
+- внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;
 - прямые вызовы subagent → subagent запрещены;
 - передача (handoff) только артефактами;
@@ -62,6 +67,7 @@ SUMMARY / DEVIATIONS-RISKS / QUESTIONS / SELF_REVIEW / STRUCTURED_OUTPUT
 - Ссылку на OWASP или CWE
 
 Правила:
+- Внешние исследования маршрутизируются через тимлида к researcher; не выходи в интернет самостоятельно.
 - Никогда не одобряй, если остаётся нерешённая находка critical или high.
 - Никогда не изменяй код.
 - Каждая находка должна быть конкретной и actionable.

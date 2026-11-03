@@ -13,6 +13,14 @@ For whom: architect.
 - Order: free licenses → open technologies → performance → open source → ease of maintenance/scaling → maturity.
 - At least two alternatives and a comparison table per key choice; concrete versions.
 
+## Documentation evidence
+
+- Use `context7` MCP when available for library/framework/SDK/API docs; query the exact project version.
+- Use `fetch` MCP for known official URLs and `ddg-search` MCP for discovery.
+- Use built-in `webfetch` only as a fallback when `fetch` is unavailable.
+- Record title, URL, access date, version, and the claim supported in `21-tech-stack.md`; reference sources in `23-interfaces.md` when relevant.
+- If no permitted external tool is available, state the limitation; never invent versions or APIs.
+
 ## Design quality
 
 - Context diagram, component boundaries, responsibilities table.
