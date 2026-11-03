@@ -1,0 +1,177 @@
+{
+  "title": "Компакция сессии после каждого шага пайплайна (RU + EN)",
+  "date": "2026-11-03",
+  "scope": "RU/ и EN/ синхронно",
+  "opencode_version_baseline": "1.19.5",
+  "technical_facts": [
+    "В opencode нет агентского инструмента компакции; доступен SDK/плагин вызов client.session.summarize({ path:{id}, body:{providerID, modelID, auto} })",
+    "Ручная компакция: клавиша <leader>c (ctrl+x c) или палитра 'Compact session'",
+    "Хуки плагина: session.idle, session.compacted, experimental.session.compacting (впрыск контекста в сводку), experimental.compaction.autocontinue",
+    "Кастомный tool получает sessionID и agent в контексте execute",
+    "session.summarize не возвращает SessionBusyError (в отличие от shell/revert), но вызов из session.idle делаем с защитой и повтором",
+    "Существующий конфиг compaction (auto, prune, tail_turns, preserve_recent_tokens) оставляем как страховку"
+  ],
+  "decisions": [
+    { "setting": "compact_policy", "values": ["plugin", "prompt"], "default": "plugin", "description": "plugin — плагин + tool team_checkpoint; prompt — только промпт + ручная клавиша ctrl+x c" },
+    { "setting": "after_compaction_auto", "values": [true, false], "default": true, "description": "Только для compact_policy=plugin; synthetic continue после компакции" },
+    { "setting": "гранулярность", "value": "10 шагов §6; question не компактится; 2b-flow только при custom-flow; increment/bugfix: 1-tor, 2-clarify, 3-analysis (scout), 6-development, 8-review (вкл. security), 9-testing, 10-delivery; внутри параллельной группы компакции нет — только после фазы разработки" },
+    { "setting": "область", "value": "RU + EN синхронно" }
+  ],
+  "state_schema_addition": {
+    "settings": {
+      "compact_policy": "plugin | prompt",
+      "after_compaction_auto": "boolean"
+    }
+  },
+  "changes": [
+    {
+      "step": 1,
+      "file": ".opencode/plugins/team-compact.js (EN + RU, байт-в-байт)",
+      "action": "новый файл",
+      "details": [
+        "Экспорт TeamCompact, ESM, без внешних зависимостей",
+        "Tool team_checkpoint: аргументы slug?, phase, step, next_action?; защита context.agent !== 'team-lead' -> throw",
+        "Tool: сверяет phase/step с state.json; несовпадение -> ошибка 'сначала обнови state.json', компакция не планируется",
+        "Tool: compact_policy=plugin -> пишет team-workspace/<slug>/.compact-pending.json { session_id, project, phase, step, next_action, requested_at, auto }",
+        "Tool: compact_policy=prompt -> маркер не пишет, возвращает строку [COMPACT] ... Нажмите ctrl+x c",
+        "Tool: идемпотентен (перезапись маркера, не очередь)",
+        "Event session.idle: маркер только для event.properties.sessionID; дочерние сессии игнорируются",
+        "Event session.idle: маркер старше 15 мин или phase=done -> удалить без компакции",
+        "Event session.idle: удаляет маркер ДО вызова (защита от петли)",
+        "Event session.idle: модель из последнего assistant-сообщения сессии, fallback models.json['team-lead']",
+        "Event session.idle: client.session.summarize({ path:{id}, body:{providerID, modelID, auto: settings.after_compaction_auto} })",
+        "Event session.idle: ошибка -> 1 повтор через 1 с, затем compaction.log и fallback; сессию не ломаем",
+        "Event session.idle: in-memory busy set против параллельного запуска",
+        "Event session.compacted: запись успеха в compaction.log",
+        "Hook experimental.session.compacting: впрыск снимка state.json (<= ~1500 токенов): project/request_type/phase/step/iterations/git.branch, quality_gates, таблица tasks (обрезка при >20), customer_question, pending_checkpoint, RULES: state.json важнее сводки, перечитать артефакты, продолжить с шага",
+        "Файл compaction.log (JSONL, read-only для агентов): ts, project, session, phase, step, policy, auto, ok, error"
+      ]
+    },
+    {
+      "step": 2,
+      "file": ".opencode/agent/team-lead.md (EN + RU)",
+      "action": "изменение",
+      "details": [
+        "Frontmatter: tools: team_checkpoint: true (остальным агентам не добавлять)",
+        "Новый раздел после Pre-dispatch: 'Контрольные точки шага и компакция'",
+        "Порядок: 1) обновить state.json; 2) опубликовать результат шлюза; 3) последним действием шага вызвать team_checkpoint; 4) plugin: завершить ход -> компакция -> synthetic continue -> первым действием перечитать state.json; 5) prompt: вывести [COMPACT] ... ctrl+x c и остановиться, после действия пользователя перечитать state.json",
+        "Запреты: вызывать до обновления state.json; дважды за шаг; на question; внутри параллельной группы",
+        "Обработка ошибки tool: исправить state.json и повторить; повторная ошибка -> сообщить заказчику и перейти на prompt",
+        "В обязанности: компакция на границах шагов; в ограничения: сначала state.json, потом компакция"
+      ]
+    },
+    {
+      "step": 3,
+      "file": "AGENTS.md (RU + EN, структура 1:1)",
+      "action": "изменение",
+      "details": [
+        "§6: подраздел 6.1 'Контрольные точки шага' — таблица шагов/ID, порядок, поведение политик, пропуски",
+        "§8: в дерево добавить .compact-pending.json (транзиентный) и compaction.log",
+        "§10: в settings — compact_policy, after_compaction_auto + семантика",
+        "§14: пункт 'Компакция после шага'",
+        "§15.4: формат дайджеста [COMPACT] phase=<phase> step=<step> policy=<plugin|prompt> auto=<true|false> next=<...>"
+      ]
+    },
+    {
+      "step": 4,
+      "file": "agent-team-spec.md (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "§1 — требование о компакции на границах шагов",
+        "§2.1 — team_checkpoint только у team-lead",
+        "§3.1 — примечание к таблице шагов; новый §3.5 'Контрольные точки и компакция' (после 3.4)",
+        "§4 — дерево workspace; §4.1 — схема settings + семантика полей (13, 14)",
+        "§5 — новый §5.21 'Политика компакции'",
+        "§6.4 — [COMPACT]",
+        "§7 — плагины: team-tokens.js, team-compact.js; хуки и tool",
+        "§8.1 — обязанности team-lead; §9.1/9.2/9.3 — setup/status/resume",
+        "§10 — team-protocol (строка навигатора); §11 — состав устава; §12 — тиражирование; §13 — критерии приёмки (5 новых проверок)",
+        "Опционально: версия v2.6-hybrid -> v2.7-hybrid + пункт в 'Список изменений' (ожидает решения)"
+      ]
+    },
+    {
+      "step": 5,
+      "file": ".opencode/command/team-setup.md (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "После tokens_log два вопроса: compact-policy (plugin рекомендуется / prompt) и after-compaction-auto (true рекомендуется / false; в prompt не спрашивать и писать false с пометкой)",
+        "Запись в state.json -> settings",
+        "--settings: включить обе настройки в перенастройку"
+      ]
+    },
+    {
+      "step": 6,
+      "file": ".opencode/command/team-status.md (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "Показывать compact_policy, after_compaction_auto, последнюю компакцию (compaction.log) и незавершённую контрольную точку (.compact-pending.json)"
+      ]
+    },
+    {
+      "step": 7,
+      "file": ".opencode/command/team-resume.md (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "Свежий маркер -> сначала компакция (или указание нажать ctrl+x c), затем продолжение",
+        "Устаревший маркер удаляется"
+      ]
+    },
+    {
+      "step": 8,
+      "file": "readme.txt (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "В 'Настраиваемые параметры': compact-policy, after-compaction-auto",
+        "Требование opencode >= 1.19.4, ручной fallback ctrl+x c",
+        "Пометка: в prompt-режиме after-compaction-auto не применяется"
+      ]
+    },
+    {
+      "step": 9,
+      "file": "deploy.sh (EN + RU)",
+      "action": "изменение",
+      "details": [
+        "Комментарий: plugins/ team-tokens + team-compact",
+        "Верификация: plugins: 2/2, порог -ge 2, node --check для обоих плагинов",
+        "Доп. проверка: team_checkpoint: true в team-lead.md"
+      ]
+    },
+    {
+      "step": 10,
+      "file": ".opencode/skill/team-protocol/SKILL.md (RU + EN)",
+      "action": "изменение",
+      "details": [
+        "Строка навигатора: 'Контрольные точки шага и компакция | AGENTS.md §6.1; spec §3.5, §5.21'"
+      ]
+    }
+  ],
+  "verification": [
+    "node --check обоих плагинов",
+    "Импорт team-compact.js в node с mock-контекстом: сборка снимка, выбор политики, путь маркера, отсутствие падений без workspace",
+    "Паритет EN/RU: tools: блоки агентов байт-в-байт; одинаковое число заголовков в spec; наличие новых разделов в обеих версиях",
+    "bash -n deploy.sh, --dry-run, живой деплой в /tmp: 12/4/10/2, JSON валиден, чартерный маркер на месте",
+    "Поиск: compact_policy, after_compaction_auto, team_checkpoint, [COMPACT], compaction.log присутствуют во всех нужных файлах",
+    "Ручной smoke после деплоя: /team-setup -> шаг -> team_checkpoint -> компакция -> продолжение; затем prompt-режим"
+  ],
+  "risks": [
+    "summarize из session.idle может попасть в занятую сессию -> повтор + fallback в prompt + лог",
+    "auto:true вызывает synthetic 'Continue...' — тимлид обязан перечитать state.json; при ожидании заказчика публикует карту решения и завершает ход",
+    "Компакция — дополнительный LLM-вызов на каждом шаге (стоимость линейна объёму контекста); переключение на prompt при необходимости",
+    "Потеря нюансов диалога компенсируется снимком state + обязательным перечитыванием артефактов",
+    "В prompt-режиме after_compaction_auto технически не применяется (ручная компакция TUI не делает auto-continue) — документируем",
+    "Кастомный tool виден субагентам на уровне плагина -> жёсткая проверка context.agent"
+  ],
+  "work_order": [
+    "плагин team-compact.js + офлайн-тест",
+    "team-lead (EN + RU)",
+    "чартер AGENTS.md (RU + EN)",
+    "команды (RU + EN)",
+    "спецификация (RU + EN)",
+    "readme.txt и deploy.sh (RU + EN)",
+    "скилл team-protocol (RU + EN)",
+    "верификация"
+  ],
+  "open_questions": [
+    "Бампать ли версию спецификации v2.6-hybrid -> v2.7-hybrid (ожидает решения пользователя)"
+  ]
+}
