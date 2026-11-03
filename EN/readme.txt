@@ -1,5 +1,5 @@
 VIRTUAL SOFTWARE DEVELOPMENT TEAM
-Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.6-hybrid)
+Multi-agent SDLC system for opencode, based on agent-team-spec.md (v2.7-hybrid)
 
 ================================================================================
 WHAT THIS IS
@@ -28,7 +28,11 @@ Key mechanisms:
   - handoff by artifact — all exchanges go through versioned markdown
     artifacts in the workspace, never chat-only;
   - token accounting plugin and git policy (own working branch per request,
-    merge into base only after your acceptance).
+    merge into base only after your acceptance);
+  - step checkpoints with session compaction — after every pipeline step the
+    session is compacted (automatically with the team-compact plugin, or
+    manually by you), and state.json is re-read, so long sessions never lose
+    the plot.
 
 Layout:
   opencode.json            opencode configuration (default agent: team-lead)
@@ -36,7 +40,8 @@ Layout:
   agent-team-spec.md       full technical specification
   .opencode/agent/         12 agent files (team-lead is primary, rest are subagents)
   .opencode/command/       /team-setup, /team-status, /team-resume, /team-tokens-used
-  .opencode/plugins/       team-tokens plugin (maintains tokens.log)
+  .opencode/plugins/       team-tokens plugin (maintains tokens.log) and
+                           team-compact plugin (step checkpoints, session compaction)
   .opencode/skill/         10 role skills
   team-workspace/<slug>/   per-project artifacts, state.json, models.json, tokens.log
 
@@ -47,6 +52,38 @@ Quick start:
   4. Hand your ToR to the team-lead.
 
 All team communication, artifacts and prompts are in English.
+
+Deploying to another project:
+  deploy.sh is self-contained: all team files are embedded in the script, so
+  you can copy just this one file anywhere and run it.
+
+    ./deploy.sh <target-dir>            # install the team into a project
+    ./deploy.sh <target-dir> --dry-run  # preview only
+    ./deploy.sh <target-dir> --force    # overwrite existing team files (backed up)
+    ./deploy.sh <target-dir> --no-charter --no-spec
+    ./deploy.sh <target-dir> --with-default-agent
+    ./deploy.sh -h                      # full help
+
+  It installs the team files, merges `instructions: += AGENTS.md` into the
+  target opencode.json (never overwriting it; the charter becomes
+  AGENTS-team.md if the target already has its own AGENTS.md), and verifies
+  the result. Existing team-workspace/, tokens.log and compaction.log in the
+  target are never touched.
+
+Maintaining deploy.sh (repo root):
+  The embedded copies of the team files (the payload after "exit 0" in
+  deploy.sh) are regenerated from the canonical sources in EN/ and RU/:
+
+    ./build-deploy.sh          # resync both locales
+    ./build-deploy.sh RU       # resync one locale
+
+  Important: build-deploy.sh resyncs ONLY the payload bodies. The code part
+  of deploy.sh (everything before "exit 0") is duplicated between EN and RU
+  and is not touched by the script — edit it in EN/deploy.sh, copy the file
+  to RU/deploy.sh, then run ./build-deploy.sh RU to restore the RU payload.
+  Check that the code parts are in sync:
+
+    diff <(sed -n '1,/^exit 0$/p' EN/deploy.sh) <(sed -n '1,/^exit 0$/p' RU/deploy.sh)
 
 ================================================================================
 TYPICAL SCENARIOS
@@ -100,7 +137,7 @@ COMMANDS
 /team-status
     Read-only snapshot of the current project: phase, request type, quality
     gate statuses, task table, open customer question, learnings, latest
-    artifacts.
+    artifacts, compaction settings and the last compaction.
 
 /team-resume
     Finds the active project, summarizes where the team stopped, and
@@ -145,6 +182,24 @@ settings.tokens_log (on/off)
 settings.regression_mode (changed/full)
     Final-testing scope. Default is changed (only affected behavior);
     full regression runs only after your explicit decision.
+
+settings.compact_policy (plugin/prompt) — compaction after pipeline steps
+    After every completed step the team-lead records a checkpoint (updates
+    state.json, then calls team_checkpoint) and the session is compacted,
+    keeping long sessions small and focused.
+    plugin       (recommended; requires opencode 1.19.4+) the team-compact
+                 plugin compacts the session automatically when the step's
+                 turn ends and injects a state.json snapshot into the
+                 summary, so nothing important is lost.
+    prompt       the team-lead publishes a [COMPACT] line and asks you to
+                 compact manually: press ctrl+x c (Compact session). The
+                 pipeline continues after your compaction.
+
+settings.after_compaction_auto (on/off)
+    Only with compact_policy: plugin. When on (recommended), the pipeline
+    continues by itself after each step compaction — the team-lead re-reads
+    state.json first. When off, the team-lead waits for you after every
+    compaction. Not applicable to manual (prompt) compaction.
 
 state.json -> learnings
     Accumulated session knowledge (common_issues, user_preferences,

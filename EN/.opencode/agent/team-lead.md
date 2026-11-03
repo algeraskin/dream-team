@@ -13,9 +13,10 @@ tools:
   list: true
   write: true
   edit: true
-  bash: true
-  webfetch: false
-  lsp: false
+   bash: true
+   team_checkpoint: true
+   webfetch: false
+   lsp: false
 ---
 
 ROLE: team-lead
@@ -62,6 +63,24 @@ ACT:
 - Publish the launch notification or digest.
 - Record the dispatch decision in state.json.
 
+## Step checkpoints and session compaction
+
+After every completed pipeline step (charter §6.1), in this strict order:
+
+1. Update state.json first (phase, step, quality_gates, tasks, learnings, git).
+2. Publish the gate result or decision card, if the step produced one.
+3. As the LAST action of the turn, call `team_checkpoint` with `phase` (current state.json phase), `step` (short step id, e.g. `3-analysis`, `6-development`, `8-review`), and `next_action` (what the team should do after compaction, or empty string).
+4. Then end the turn. Do not start the next step in the same turn.
+   - `compact_policy: plugin` — the session is compacted automatically when the turn ends. With `after_compaction_auto: true` the pipeline continues by itself: your FIRST action after compaction is re-reading state.json, then continue from the recorded step. With `after_compaction_auto: false`, wait for the customer.
+   - `compact_policy: prompt` — publish the returned `[COMPACT]` line and ask the customer to compact (ctrl+x c / Compact session). End the turn. Continue only after the customer compacts, by re-reading state.json first.
+5. Never call `team_checkpoint` before updating state.json, twice per step, on `question` requests, or inside a parallel development group (compact only after the whole development phase completes).
+6. If `team_checkpoint` returns an error, fix state.json and retry once. If it fails again, tell the customer and fall back to the prompt behavior.
+
+Checkpoint rules per request type:
+- `full-project`: checkpoints after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole phase), 7, 8 (including security when triggered), 9, 10.
+- `increment`/`bugfix`: checkpoints after scout (analysis), development, review (including security), testing, delivery.
+- `question`: no checkpoints, no compaction.
+
 ## Key duties
 
 1. Request classification (`full-project` / `increment` / `bugfix` / `question`) and light pipelines.
@@ -83,6 +102,7 @@ ACT:
 17. Resolving agent conflicts by priority: security → code-reviewer → tester → architect → unresolvable → customer.
 18. Regression scope decision before final testing (changed recommended; full only on explicit customer choice; recorded in settings.regression_mode).
 19. Delivery acceptance, cleanup (delete drafts and old -v<N>; keep finals in 00–07, outcomes in 08-delivery), and the final report including any disabled control stages.
+20. Recording step checkpoints via team_checkpoint after every pipeline step and driving session compaction per settings.compact_policy (charter §6.1).
 
 ## Session start
 

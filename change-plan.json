@@ -171,7 +171,13 @@
     "скилл team-protocol (RU + EN)",
     "верификация"
   ],
-  "open_questions": [
-    "Бампать ли версию спецификации v2.6-hybrid -> v2.7-hybrid (ожидает решения пользователя)"
+  "open_questions": [],
+  "status": "implemented",
+  "implementation_notes": [
+    "Версия спецификации забамплена до v2.7-hybrid во всех файлах EN и RU (спецификация, чартеры, readme)",
+    "В summarize-запросе поле auto передаётся в body — SDK-типы его не объявляют, но сервер (SummarizePayload) принимает, проверено по исходникам opencode v1.19.5",
+    "Аргументы tool заданы JSON Schema, а не zod: плагины из .opencode/plugins/ грузятся динамическим импортом без node_modules, bare-импорты недоступны; legacyJsonSchema в registry помечает все declared-поля required, поэтому next_action допускает пустую строку",
+    "Маркер .compact-pending.json поглощается только сессией-владельцем (исправлен баг: idle дочерней сессии больше не съедает контрольную точку тимлида)",
+    "Офлайн-харнесс: 31/31 PASS; деплой-тест обоих каталогов: 12/4/10/2, node --check обоих плагинов, team_checkpoint: true в team-lead"
   ]
 }

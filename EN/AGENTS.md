@@ -1,6 +1,6 @@
 # Team Charter — Virtual Software Development Team
 
-Full specification: `agent-team-spec.md` (v2.6-hybrid). This charter is binding for all agents. Where this charter and an agent file conflict, the charter's mandatory constraints win; an agent file may narrow permissions and rules but never weaken them.
+Full specification: `agent-team-spec.md` (v2.7-hybrid). This charter is binding for all agents. Where this charter and an agent file conflict, the charter's mandatory constraints win; an agent file may narrow permissions and rules but never weaken them.
 
 ## 1. Purpose
 
@@ -44,7 +44,7 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 | Agent | Allowed | Denied |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (git and service commands only) | `webfetch`, `lsp` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (git and service commands only), `team_checkpoint` | `webfetch`, `lsp` |
 | `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
 | `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
 | `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, MCP fetch/context7 for external knowledge, `write`, `edit` | `bash`, `task`, `question` |
@@ -54,7 +54,7 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 | `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
 | `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
 
-Notes: `question` belongs to `team-lead` only and is disabled in all subagents. `bash` is role-scoped: `code-reviewer` — tests/builds only; `team-lead` — git and service commands only.
+Notes: `question` and `team_checkpoint` belong to `team-lead` only and are disabled in all subagents. `bash` is role-scoped: `code-reviewer` — tests/builds only; `team-lead` — git and service commands only.
 
 ## 5. Request types and pipelines
 
@@ -83,6 +83,25 @@ Phase quality gates (recorded in `state.json → quality_gates`; a transition is
 - **Review** (before testing/delivery): no unresolved blocker/major remarks; acceptance-criteria table present; failed criterion or blocker/major → `CHANGES_REQUESTED`; security audit triggered where required; no unresolved critical/high security findings.
 - **Testing** (before delivery): scope declared (`changed` or `full`); traceability matrix present; scenarios anchored to contract acceptance criteria; no unresolved critical/high defects; report states what was tested, what was not, and why.
 - **Delivery** (before final acceptance): customer accepted; final artifacts saved; intermediate drafts cleaned; git state recorded; final report complete including disabled control stages.
+
+### 6.1. Step checkpoints and session compaction
+
+After every completed pipeline step, the team-lead records a checkpoint: it updates `state.json` first, publishes the gate result or decision card, and then — as the last action of the turn — calls `team_checkpoint` (`phase`, `step` short id such as `3-analysis` or `6-development`, `next_action`). The turn ends without starting the next step.
+
+Checkpoints per request type:
+
+- `full-project`: after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole development phase, not per task), 7, 8 (including security when triggered), 9, 10.
+- `increment`/`bugfix`: after scout (analysis), development, review (including security), testing, delivery.
+- `question`: no checkpoints, no compaction.
+
+Behavior per `settings.compact_policy` (set at `/team-setup`):
+
+- `plugin` (default): the team-compact plugin compacts the session automatically when the turn ends and injects a `state.json` snapshot into the summary. With `after_compaction_auto: true` (default) the pipeline continues by itself; the team-lead's first action after compaction is re-reading `state.json`, then continuing from the recorded step. With `after_compaction_auto: false` the team-lead waits for the customer. The team-lead publishes the digest `[COMPACT] phase=<phase> step=<step> policy=plugin auto=<true|false> next=<...>` (see §15.4).
+- `prompt`: no automatic compaction; the team-lead publishes the `[COMPACT]` line and asks the customer to compact the session manually (ctrl+x c / Compact session), then continues only after the customer does, re-reading `state.json` first. `after_compaction_auto` does not apply to manual compaction.
+
+Forbidden: calling `team_checkpoint` before updating `state.json`; twice per step; on `question` requests; inside a parallel development group. If the tool fails, fix `state.json` and retry once; on repeated failure, tell the customer and fall back to the prompt behavior.
+
+The plugin maintains `team-workspace/<slug>/compaction.log` (JSONL; read-only for agents) and the transient marker `.compact-pending.json`; the snapshot of `state.json` is authoritative over any compacted summary — after compaction, artifacts and `state.json` are re-read, never recalled from chat memory.
 
 ## 7. Decision cards
 
@@ -118,7 +137,9 @@ team-workspace/<slug>/
 ├── 08-delivery/        final report and final versions of artifacts
 ├── state.json          pipeline state (updated only by team-lead)
 ├── models.json         model assignment per role (canonical source)
-└── tokens.log          token usage log (plugin writes, agents read; read-only for agents)
+├── tokens.log          token usage log (plugin writes, agents read; read-only for agents)
+├── compaction.log      compaction journal (team-compact plugin writes; read-only for agents)
+└── .compact-pending.json  transient checkpoint marker (created and consumed by the team-compact plugin)
 ```
 
 ## 9. Artifact rules
@@ -148,7 +169,7 @@ Evidence: <commands, test results, when applicable>
 
 ## 10. state.json
 
-Updated only by the team-lead. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
+Updated only by the team-lead. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
 
 ## 11. Contract JSON twin
 
@@ -199,6 +220,7 @@ Every inter-agent handoff is an artifact with a schema: task brief, subagent rep
 - **Git policy**: base branch `main` (else `master` or customer-named); every request gets its own working branch off the up-to-date base; the team-lead proposes the branch name, the customer accepts; commits by the team-lead with prefix `[team]: <phase> — <what>`; subagents do not perform git operations unless instructed; merging into base only after delivery acceptance by customer decision; branches recorded in `state.json → git`.
 - **Security rules**: secrets only via environment variables and `.env.example`; no customer data to external services without necessity; findings concrete, actionable, severity-graded.
 - **Token accounting**: the team-tokens plugin maintains `tokens.log`; agents never edit it; `/team-tokens-used` shows statistics.
+- **Step checkpoints and compaction**: after every pipeline step the team-lead records a checkpoint via `team_checkpoint` and drives session compaction per `settings.compact_policy` (§6.1); `state.json` and artifacts are re-read after every compaction.
 - **Heartbeat**: when `settings.heartbeat` is on, long-running developer reports are created as skeletons at task start and updated as sections complete.
 - **Subagent failure protocol**: `QUESTION` — team-lead answers (tester answers via re-dispatch with `SIGNAL: STOP | PROCEED`); `NEED_INPUT` — team-lead supplies the input; `FAIL` — retry, split, reassign, or escalate; no-response timeout — one retry, then incomplete mark in `state.json` with manual completion; mandatory review/security/testing stages are kept.
 - **Conflict resolution priority**: `security → code-reviewer → tester → architect → unresolvable → customer`; unresolvable conflicts go to the customer with options, pros/cons, and the team-lead's recommendation.
@@ -261,6 +283,7 @@ Before every `task` call the team-lead notifies the customer. In `launch_mode: a
 ```text
 [DISPATCH] role=<role> model=<model> task=<T<N>> mode=<mode> goal=<one-line goal>
 [RESULT] task=<T<N>> status=<status> verdict=<verdict> counters=<counters> root_cause=<root_cause or N/A>
+[COMPACT] phase=<phase> step=<step> policy=<plugin|prompt> auto=<true|false> next=<one-line next action or N/A>
 ```
 
 Full prompts/replies are shown in `confirm` and `custom-flow` modes and always on `QUESTION` or `FAIL`. In confirm/custom-flow the options are: launch; launch and don't ask until this task's verdict (recorded in `tasks[].auto_launch`); edit; cancel. A parallel group uses one notification block and one confirmation.

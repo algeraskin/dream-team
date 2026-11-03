@@ -1,6 +1,6 @@
 # Чартер команды — Virtual Software Development Team
 
-Полная спецификация: `agent-team-spec.md` (v2.6-hybrid). Чартер обязателен для всех агентов. При конфликте между чартером и файлом агента обязательные ограничения чартера имеют приоритет; файл агента может сужать права и правила, но не ослаблять их.
+Полная спецификация: `agent-team-spec.md` (v2.7-hybrid). Чартер обязателен для всех агентов. При конфликте между чартером и файлом агента обязательные ограничения чартера имеют приоритет; файл агента может сужать права и правила, но не ослаблять их.
 
 ## 1. Назначение
 
@@ -44,7 +44,7 @@
 
 | Агент | Разрешено | Запрещено |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (только git и сервисные команды) | `webfetch`, `lsp` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` (только git и сервисные команды), `team_checkpoint` | `webfetch`, `lsp` |
 | `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
 | `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
 | `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, MCP fetch/context7 для внешних знаний, `write`, `edit` | `bash`, `task`, `question` |
@@ -54,7 +54,7 @@
 | `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
 | `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
 
-Примечания: `question` принадлежит только `team-lead` и отключён у всех субагентов. `bash` ограничен ролью: `code-reviewer` — только тесты/сборка; `team-lead` — только git и сервисные команды.
+Примечания: `question` и `team_checkpoint` принадлежат только `team-lead` и отключены у всех субагентов. `bash` ограничен ролью: `code-reviewer` — только тесты/сборка; `team-lead` — только git и сервисные команды.
 
 ## 5. Типы запросов и пайплайны
 
@@ -83,6 +83,25 @@
 - **Ревью** (перед тестированием/сдачей): нет нерешённых blocker/major замечаний; таблица критериев приёмки присутствует; проваленный критерий или blocker/major → `CHANGES_REQUESTED`; шлюз безопасности запущен там, где требуется; нет нерешённых критических/высоких находок безопасности.
 - **Тестирование** (перед сдачей): SCOPE объявлен (`changed` или `full`); матрица трассируемости присутствует; сценарии привязаны к критериям приёмки контрактов; нет нерешённых критических/высоких дефектов; отчёт указывает, что протестировано, что нет и почему.
 - **Сдача** (перед финальной приёмкой): заказчик принял; финальные артефакты сохранены; черновики очищены; git-состояние зафиксировано; финальный отчёт полон, включая отключённые контрольные этапы.
+
+### 6.1. Контрольные точки шага и компакция сессии
+
+После каждого завершённого шага пайплайна team-lead фиксирует контрольную точку: сначала обновляет `state.json`, публикует результат шлюза или карту решений и затем — последним действием хода — вызывает `team_checkpoint` (`phase`, `step` — короткий id шага, например `3-analysis` или `6-development`, `next_action` — что делать после компакции). Ход завершается без начала следующего шага.
+
+Контрольные точки по типам запросов:
+
+- `full-project`: после шагов 1, 2, 2b (только custom-flow), 3, 4, 5, 6 (после всей фазы, а не по задачам), 7, 8 (включая security при срабатывании), 9, 10.
+- `increment`/`bugfix`: после scout (анализ), разработки, ревью (включая security), тестирования, поставки.
+- `question`: контрольных точек нет, компакции нет.
+
+Поведение по `settings.compact_policy` (задаётся в `/team-setup`):
+
+- `plugin` (по умолчанию): плагин team-compact компактит сессию автоматически по завершении хода и подмешивает снимок `state.json` в сводку. При `after_compaction_auto: true` (по умолчанию) конвейер продолжает сам; первое действие team-lead'а после компакции — перечитать `state.json`, затем продолжить с зафиксированного шага. При `after_compaction_auto: false` team-lead ждёт заказчика. Публикуется дайджест `[COMPACT] phase=<phase> step=<step> policy=plugin auto=<true|false> next=<...>` (см. §15.4).
+- `prompt`: автоматической компакции нет; team-lead публикует строку `[COMPACT]` и просит заказчика компактить сессию вручную (ctrl+x c / Compact session), затем продолжает только после этого, сначала перечитав `state.json`. `after_compaction_auto` к ручной компакции не применяется.
+
+Запрещено: вызывать `team_checkpoint` до обновления `state.json`; дважды за шаг; на запросах `question`; внутри параллельной группы разработки. При ошибке инструмента — исправить `state.json` и повторить один раз; при повторной ошибке — сообщить заказчику и перейти к поведению prompt.
+
+Плагин ведёт `team-workspace/<slug>/compaction.log` (JSONL; для агентов read-only) и транзиентный маркер `.compact-pending.json`; снимок `state.json` главнее любой сводки компакции — после компакции артефакты и `state.json` перечитываются, а не восстанавливаются по памяти диалога.
 
 ## 7. Карты решений
 
@@ -118,7 +137,9 @@ team-workspace/<slug>/
 ├── 08-delivery/        финальный отчёт и финальные версии артефактов
 ├── state.json          состояние пайплайна (обновляет только team-lead)
 ├── models.json         назначение моделей по ролям (канонический источник)
-└── tokens.log          журнал расхода токенов (пишет плагин, агенты читают; для агентов read-only)
+├── tokens.log          журнал расхода токенов (пишет плагин, агенты читают; для агентов read-only)
+├── compaction.log      журнал компакций (пишет плагин team-compact; для агентов read-only)
+└── .compact-pending.json  транзиентный маркер контрольной точки (создаётся и поглощается плагином team-compact)
 ```
 
 ## 9. Правила артефактов
@@ -148,7 +169,7 @@ Evidence: <команды, результаты тестов, когда при�
 
 ## 10. state.json
 
-Обновляется только team-lead'ом. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
+Обновляется только team-lead'ом. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
 
 ## 11. JSON-двойник контракта
 
@@ -199,6 +220,7 @@ Executable feedback
 - **Git-политика**: базовая ветка `main` (иначе `master` или названная заказчиком); на каждый запрос — своя рабочая ветка от актуальной базы; имя ветки предлагает team-lead, заказчик принимает; коммиты делает team-lead с префиксом `[team]: <фаза> — <что>`; субагенты не выполняют git-операции без указания; слияние в базу — только после приёмки сдачи решением заказчика; ветки фиксируются в `state.json → git`.
 - **Правила безопасности**: секреты только через переменные окружения и `.env.example`; без необходимости не передавать данные заказчика внешним сервисам; находки конкретные, действенные, с градацией серьёзности.
 - **Учёт токенов**: плагин team-tokens ведёт `tokens.log`; агенты его никогда не редактируют; статистику показывает `/team-tokens-used`.
+- **Контрольные точки и компакция**: после каждого шага пайплайна team-lead фиксирует контрольную точку через `team_checkpoint` и управляет компакцией сессии согласно `settings.compact_policy` (§6.1); после каждой компакции `state.json` и артефакты перечитываются.
 - **Heartbeat**: когда `settings.heartbeat` включён, длинные отчёты разработчиков создаются как заготовки в начале задачи и дополняются по мере завершения разделов.
 - **Протокол сбоя субагента**: `QUESTION` — team-lead отвечает (tester отвечает через повторный запуск с `SIGNAL: STOP | PROCEED`); `NEED_INPUT` — team-lead поставляет вход; `FAIL` — повтор, разбиение, переназначение или эскалация; таймаут без ответа — один повтор, затем пометка incomplete в `state.json` с ручным завершением; обязательные этапы ревью/безопасности/тестирования сохраняются.
 - **Приоритет разрешения конфликтов**: `security → code-reviewer → tester → architect → неразрешимо → заказчик`; неразрешимые конфликты уходят заказчику с вариантами, плюсами/минусами и рекомендацией team-lead.
@@ -261,6 +283,7 @@ STRUCTURED_OUTPUT: <огороженный YAML-блок>
 ```text
 [DISPATCH] role=<роль> model=<модель> task=<T<N>> mode=<mode> goal=<цель одной строкой>
 [RESULT] task=<T<N>> status=<статус> verdict=<вердикт> counters=<счётчики> root_cause=<root_cause или N/A>
+[COMPACT] phase=<phase> step=<step> policy=<plugin|prompt> auto=<true|false> next=<следующее действие одной строкой или N/A>
 ```
 
 Полные промпты/ответы показываются в режимах `confirm` и `custom-flow` и всегда при `QUESTION` или `FAIL`. В confirm/custom-flow варианты: запуск; запуск и не спрашивать до вердикта этой задачи (фиксируется в `tasks[].auto_launch`); правка; отмена. Параллельная группа использует один блок уведомления и одно подтверждение.

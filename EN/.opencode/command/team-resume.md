@@ -17,7 +17,9 @@ Read:
 - current step artifacts.
 
 Then:
+- Check the checkpoint marker `team-workspace/<slug>/.compact-pending.json`: if a fresh marker (younger than 15 minutes) exists, compact the session before continuing — with `compact_policy: plugin` the compaction starts automatically on session idle, so simply end the turn; with `compact_policy: prompt` ask the customer to press ctrl+x c. A stale marker is deleted without action.
 - Summarize where the team stopped (phase, step, active tasks, pending questions).
+- After any compaction, re-read state.json before acting on the summary.
 - Continue the pipeline from the committed step.
 - Do not re-run completed steps.
 - Verify models match `models.json` (canonical source).

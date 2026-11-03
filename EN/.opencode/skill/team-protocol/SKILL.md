@@ -13,6 +13,7 @@ This skill is a navigator: it contains no rules or schemas itself — it maps ta
 | Tool matrix (who may use what) | AGENTS.md §4; spec §2.1 |
 | Request types and pipelines | AGENTS.md §5; spec §2.2 |
 | Pipeline steps and quality gates | AGENTS.md §6; spec §3 |
+| Step checkpoints and session compaction | AGENTS.md §6.1; spec §3.5, §5.21 |
 | Decision cards | AGENTS.md §7; spec §3.4, §6.7 |
 | Workspace and artifact rules, header template | AGENTS.md §8–9; spec §4 |
 | state.json schema and field semantics | AGENTS.md §10; spec §4.1 |

@@ -21,6 +21,8 @@ Show:
 - launch mode;
 - token accounting;
 - regression mode;
+- compaction policy (`compact_policy`) and auto-continuation (`after_compaction_auto`);
+- last compaction (last record of `compaction.log`: phase, step, ts) and any pending checkpoint marker (`.compact-pending.json`);
 - quality gate status (all 8 gates: passed/checked_at/note);
 - routing hints if present;
 - learnings (common issues, user preferences, project patterns);

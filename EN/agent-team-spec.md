@@ -2,12 +2,22 @@
 # ToR: Virtual Software Development Team
 ## Multi-agent system for opencode
 
-**Version:** 2.6-hybrid  
+**Version:** 2.7-hybrid  
 **Date:** 2026-11-03  
 **Status:** final  
 **Base:** v2.4 + process governance enhancements + GLM v2.5 borrowings  
 
 This is the unified technical specification for the “virtual development team” agent system. The file is self-contained: an analogous team can be created from it in any opencode project from scratch.
+
+## Changelog v2.7-hybrid
+
+Step checkpoints and session compaction:
+
+1. `team_checkpoint` tool (team-lead only) + `team-compact` plugin: after every completed pipeline step the team lead records a checkpoint, and the session is compacted per `settings.compact_policy` (`plugin` — automatic compaction with a `state.json` snapshot injected into the summary; `prompt` — manual compaction by the customer).
+2. New settings: `settings.compact_policy` (`plugin|prompt`, default `plugin`) and `settings.after_compaction_auto` (default `true`), configured at `/team-setup`.
+3. New digest line `[COMPACT]` in launch notifications (§6.4); new files `compaction.log` and the transient `.compact-pending.json` in the workspace (§4).
+4. New sections: §3.5 (checkpoints in the pipeline), §5.21 (compaction policy); commands `/team-setup`, `/team-status`, `/team-resume` extended.
+5. New acceptance criteria 59–62 (§13).
 
 ## Changelog v2.6-hybrid
 
@@ -71,6 +81,7 @@ A virtual full-cycle software development team. The customer hands the Terms of 
 13. Every subagent performs self-review before reporting `DONE`.
 14. Every subagent reply includes a machine-readable `structured_output` block.
 15. Customer-facing phase transitions and substantive questions are published as decision cards ending with the team lead’s recommendation and rationale.
+16. Every completed pipeline step ends with a checkpoint: `state.json` is updated first, then the team lead calls `team_checkpoint`, and the session is compacted per `settings.compact_policy`. After every compaction, `state.json` and artifacts are re-read, never recalled from chat memory.
 
 ---
 
@@ -127,7 +138,7 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 | Agent | Allowed | Denied |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands | `webfetch`, `lsp` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands, `team_checkpoint` | `webfetch`, `lsp` |
 | `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
 | `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
 | `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, `mcp.context7` / fetch MCP for external knowledge, `write`, `edit` | `bash`, `task`, `question` |
@@ -141,7 +152,7 @@ Notes:
 
 1. Platform constraint: in opencode ≥ 1.19, `write`, `edit`, and `patch` share a single permission rule, so artifact-author roles receive both `write` and `edit`.
 2. The ban on overwriting other roles’ artifacts and previous `-v<N>` versions is enforced by charter rules, not by the toolset.
-3. `question` belongs to `team-lead` only and is explicitly disabled in subagents.
+3. `question` belongs to `team-lead` only and is explicitly disabled in subagents. `team_checkpoint` (the step-checkpoint tool provided by the team-compact plugin) also belongs to `team-lead` only.
 4. `bash` is role-scoped:
    - `code-reviewer`: tests/builds only; file modification via bash is forbidden;
    - `team-lead`: git and service commands only.
@@ -181,6 +192,8 @@ The security gate applies even in custom-flow, except for the customer’s expli
 | 8. Review of common solution | `task → code-reviewer`; security if required; blocker/major → rework | `05-review/final-review-v<N>.md` |
 | 9. Final testing | Record regression decision; `task → tester` with `SCOPE`; traceability matrix; critical/high → rework | `07-testing/<scope>-report-v<N>.md` |
 | 10. Delivery | Customer acceptance, final report, cleanup | `08-delivery/00-final-report.md` |
+
+Checkpoints: every completed step ends with a checkpoint per §3.5 (recorded after `state.json` is updated).
 
 ### 3.2. Pipeline rules
 
@@ -296,6 +309,30 @@ Rules:
 2. For phase transitions, the card must reference the corresponding quality gate status.
 3. In `custom-flow`, the customer’s confirmation is still required for subagent launches.
 4. Decision cards do not replace the security gate or quality gates.
+
+### 3.5. Step checkpoints and session compaction
+
+Every completed pipeline step ends with a checkpoint. Order:
+
+1. The team lead updates `state.json` (phase, step, quality gates, tasks, learnings, git).
+2. The gate result or decision card is published, if the step produced one.
+3. As the last action of the turn, the team lead calls `team_checkpoint` with `phase` (current state.json phase), `step` (short step id, e.g. `3-analysis`, `6-development`, `8-review`), and `next_action` (what the team should do after compaction, or an empty string).
+4. The turn ends. The next step is never started in the same turn.
+
+Checkpoints per request type:
+
+- `full-project`: after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole development phase, not per task), 7, 8 (including security when triggered), 9, 10.
+- `increment`/`bugfix`: after scout (analysis), development, review (including security), testing, delivery.
+- `question`: no checkpoints, no compaction.
+
+Behavior per `settings.compact_policy`:
+
+- `plugin` (default): the team-compact plugin compacts the session on `session.idle` (see §5.21) and injects a `state.json` snapshot into the compaction summary. With `after_compaction_auto: true` the pipeline continues automatically; the first action after compaction is re-reading `state.json`. With `after_compaction_auto: false` the team lead waits for the customer.
+- `prompt`: the tool returns a manual instruction; the team lead publishes the `[COMPACT]` line (§6.4) and asks the customer to compact (ctrl+x c / Compact session), then continues only after the customer does, re-reading `state.json` first. `after_compaction_auto` is not applicable to manual compaction.
+
+Forbidden: calling `team_checkpoint` before updating `state.json`; twice per step; on `question` requests; inside a parallel development group. On a tool error: fix `state.json`, retry once; on repeated failure tell the customer and fall back to the prompt behavior.
+
+After every compaction the snapshot in the summary is only a pointer: `state.json` and artifacts are authoritative and must be re-read before acting.
 <!-- ===== end of agent-02.md ===== --><!-- ===== agent-03.md ===== -->
 
 ---
@@ -318,7 +355,9 @@ team-workspace/<slug>/
 ├── 08-delivery/        final report and final versions of artifacts
 ├── state.json          pipeline state
 ├── models.json         model assignment per role
-└── tokens.log          token usage log, plugin writes, agents read
+├── tokens.log          token usage log, plugin writes, agents read
+├── compaction.log      compaction journal (JSONL), team-compact plugin writes, agents read
+└── .compact-pending.json  transient checkpoint marker, created and consumed by the team-compact plugin
 ```
 
 ### Artifact rules
@@ -328,8 +367,9 @@ team-workspace/<slug>/
 3. Previous versions are never overwritten.
 4. Contract files end with the fenced JSON twin. The twin is versioned together with the contract.
 5. Project code lives outside `team-workspace`, except reports and autotests where explicitly defined.
-6. `tokens.log` is read-only for agents.
+6. `tokens.log` and `compaction.log` are read-only for agents.
 7. After delivery, drafts and all previous `-v<N>` versions are deleted. Final versions remain in `00–07`, outcomes in `08-delivery`.
+8. `.compact-pending.json` is a transient service file of the team-compact plugin, not an artifact; agents never edit it.
 
 ### Artifact header template
 
@@ -366,7 +406,9 @@ Evidence: <commands, test results, when applicable>
     "heartbeat": true,
     "launch_mode": "auto",
     "tokens_log": true,
-    "regression_mode": "changed"
+    "regression_mode": "changed",
+    "compact_policy": "plugin",
+    "after_compaction_auto": true
   },
   "iterations": {
     "analysis": 0,
@@ -487,6 +529,8 @@ Evidence: <commands, test results, when applicable>
 21. With substantive refinements, flow configuration is duplicated as `00-requirements/03-flow-v<N>.md`, path stored in `flow.artifact`. The canonical source remains `state.json → flow`.
 22. `git.base` and `git.branch` record the base and current working branch for the request.
 23. A light pipeline in a delivered project (`phase: done`) reactivates the project by changing `request_type`, moving `phase` back as work proceeds, and maintaining `tasks`.
+24. `settings.compact_policy` is set at `/team-setup`. Values: `plugin` (default; the team-compact plugin compacts the session at step checkpoints and injects a `state.json` snapshot into the summary) or `prompt` (the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c). Missing means `plugin`.
+25. `settings.after_compaction_auto` is set at `/team-setup`. When `true` (default), a step-checkpoint compaction adds a synthetic continue turn and the pipeline proceeds by itself; the team lead re-reads `state.json` first. When `false`, the team lead waits for the customer. Meaningful only with `compact_policy: plugin`; with `prompt` the value is written as `false` (manual compaction never auto-continues).
 
 ---
 
@@ -796,6 +840,19 @@ After delivery:
 - all previous `-v<N>` versions are deleted;
 - final versions remain in `00–07`;
 - outcomes remain in `08-delivery`.
+
+### 5.21. Step checkpoints and compaction policy
+
+- After every completed pipeline step (§3.5) the team lead calls `team_checkpoint` as the last action of the turn, after updating `state.json`.
+- The `team-compact` plugin consumes the checkpoint marker on `session.idle`:
+  - requests session compaction via the opencode summarize API with `auto = settings.after_compaction_auto`;
+  - injects a deterministic `state.json` snapshot (project, request type, phase, step, iterations, git, quality gates, task table, customer question, pending checkpoint) into the compaction prompt via the `experimental.session.compacting` hook;
+  - appends one JSONL record to `compaction.log` per event (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`).
+- The model for compaction is taken from the last assistant message of the session, with fallback to `models.json → team-lead`.
+- A checkpoint marker is consumed by the main session only; subagent sessions never trigger compaction. A stale marker (older than 15 minutes) or `phase: done` clears the marker without compacting.
+- With `compact_policy: prompt` the plugin compacts nothing: the team lead publishes `[COMPACT]` and the customer compacts manually (ctrl+x c); the `state.json` snapshot is still injected into any manual compaction.
+- `tokens.log` and `compaction.log` are read-only for agents; `.compact-pending.json` is transient and never edited by agents.
+- After every compaction, `state.json` and artifacts are re-read; the summary is never treated as a source of truth.
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
 ---
@@ -1009,6 +1066,14 @@ After the reply:
 [RESULT] task=<T<N>> status=<status> verdict=<verdict> counters=<counters> root_cause=<root_cause or N/A>
 ```
 
+At a step checkpoint (§3.5), after `team_checkpoint`:
+
+```text
+[COMPACT] phase=<phase> step=<step> policy=<plugin|prompt> auto=<true|false> next=<one-line next action or N/A>
+```
+
+With `policy=plugin` the team lead adds that the session will be compacted automatically at the end of the turn; with `policy=prompt` — asks the customer to compact manually (ctrl+x c) and ends the turn.
+
 Full task prompt and full reply are shown only in:
 
 - `launch_mode: confirm`;
@@ -1146,6 +1211,11 @@ Agent frontmatter must include:
 
 The agent file body is the role system prompt. It must open with the standard role skeleton from Appendix A and continue with role-specific duties.
 
+Plugins (`.opencode/plugins/`):
+
+- `team-tokens.js` — token accounting into `tokens.log` (§5.16);
+- `team-compact.js` — step checkpoints, session compaction per `settings.compact_policy`, `state.json` snapshot injection, `compaction.log` (§3.5, §5.21). It provides the `team_checkpoint` tool available only to `team-lead`.
+
 Skills:
 
 ```text
@@ -1195,6 +1265,7 @@ Key duties:
 21. Resolving agent conflicts by priority.
 22. Final testing regression scope decision.
 23. Delivery acceptance and cleanup.
+24. Recording step checkpoints via `team_checkpoint` after every pipeline step and driving session compaction per `settings.compact_policy` (§3.5, §5.21).
 
 Session start:
 
@@ -1956,23 +2027,32 @@ Steps:
 8. Ask about token accounting:
    - on, recommended;
    - off.
-9. Create `team-workspace/<slug>/`:
+9. Ask about step-checkpoint compaction (`compact_policy`):
+   - `plugin`, recommended — the team-compact plugin compacts the session automatically after every pipeline step;
+   - `prompt` — the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c.
+10. Ask about auto-continuation after compaction (`after_compaction_auto`):
+   - on, recommended — the pipeline continues by itself after each step compaction (the team lead re-reads `state.json` first);
+   - off — the team lead waits for the customer after each compaction.
+
+   Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
+11. Create `team-workspace/<slug>/`:
    - `00–08`;
    - `state.json`;
    - `models.json`.
-10. `git init` + initial commit if there is no repository.
-11. Report to the customer:
+12. `git init` + initial commit if there is no repository.
+13. Report to the customer:
     - heartbeat mode;
     - launch mode;
     - token accounting;
+    - compaction policy and auto-continuation;
     - reminder to restart opencode.
-12. Hand over the ToR.
+14. Hand over the ToR.
 
 `--settings` mode:
 
 - No model poll.
 - No workspace re-creation.
-- Only mode questions: heartbeat, launch_mode, tokens_log.
+- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
 - Update `state.json → settings`.
 - Remove legacy settings fields.
 
@@ -1995,6 +2075,8 @@ Show:
 - launch mode;
 - token accounting;
 - regression mode;
+- compaction policy (`compact_policy`) and auto-continuation (`after_compaction_auto`);
+- last compaction (latest `compaction.log` record: phase, step, ts) and any pending checkpoint marker (`.compact-pending.json`);
 - quality gate status;
 - routing hints if present;
 - learnings;
@@ -2020,7 +2102,9 @@ Read:
 
 Then:
 
+- Check the checkpoint marker `.compact-pending.json`: if a fresh marker (younger than 15 minutes) exists, compact the session before continuing — with `compact_policy: plugin` the compaction starts automatically on session idle, so simply end the turn; with `compact_policy: prompt` ask the customer to press ctrl+x c. A stale marker is deleted without action.
 - Summarize where the team stopped.
+- After any compaction, re-read `state.json` before acting on the summary.
 - Continue the pipeline from the committed step.
 - Do not re-run completed steps.
 - Verify models match `models.json`.
@@ -2084,7 +2168,7 @@ AGENTS.md must contain:
    - security gate.
 4. Tool matrix.
 5. Request types and pipelines.
-6. Workflow and phase quality gates.
+6. Workflow and phase quality gates, including step checkpoints and session compaction (§6.1).
 7. Decision card rules.
 8. Workspace structure.
 9. Artifact rules:
@@ -2116,6 +2200,7 @@ AGENTS.md must contain:
     - git policy;
     - security;
     - token accounting;
+    - step checkpoints and compaction;
     - heartbeat;
     - failure protocol;
     - conflict resolution.
@@ -2290,6 +2375,13 @@ Then:
 ### Cleanup
 
 58. After delivery, intermediate artifacts are deleted and final ones saved into `08-delivery`.
+
+### Step checkpoints and compaction
+
+59. After every completed pipeline step the team lead updates `state.json` and then records a checkpoint via `team_checkpoint` as the last action of the turn.
+60. With `compact_policy: plugin` the session compacts automatically at the step boundary, a `state.json` snapshot is injected into the summary, and with `after_compaction_auto: true` the pipeline continues by itself with a fresh `state.json` read.
+61. With `compact_policy: prompt` the team lead publishes `[COMPACT]` and waits for the customer to compact manually.
+62. `compaction.log` and the transient marker `.compact-pending.json` are maintained by the team-compact plugin and never edited by agents; `/team-status` shows the compaction settings and the last compaction.
 <!-- ===== end of agent-08.md ===== --><!-- ===== agent-09.md ===== -->
 
 ---
@@ -2648,5 +2740,5 @@ Use empty arrays where there are no items.
 
 ---
 
-End of agent-team-spec v2.6-hybrid.
+End of agent-team-spec v2.7-hybrid.
 <!-- ===== end of agent-09.md ===== -->
