@@ -1412,7 +1412,7 @@ team-workspace/<slug>/
 
 ## state.json
 
-Обновляешь только ты. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
+Обновляешь только ты. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`, `context_guard`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
 
 ## Файлы контракта: нарратив и JSON-двойник
 
@@ -1572,6 +1572,8 @@ ACT:
 - `full-project`: контрольные точки после шагов 1, 2, 2b (только custom-flow), 3, 4, 5, 6 (после всей фазы), 7, 8 (включая security при срабатывании), 9, 10.
 - `increment`/`bugfix`: контрольные точки после scout (анализ), разработки, ревью (включая security), тестирования, поставки.
 - `question`: контрольных точек нет, компакции нет.
+
+Контекст субагентов: компакцию субагентских сессий выполняет плагин team-compact автоматически (context guard: проверка не чаще раза в `settings.context_guard.min_interval_min` минут, компакция с автопродолжением при `settings.context_guard.threshold_pct` заполнения; по умолчанию 3 мин / 60%). Тебе и субагентам ничего делать не нужно; события видны в `compaction.log` (read-only).
 
 ## Ключевые обязанности
 
@@ -1751,15 +1753,16 @@ agent: team-lead
 9. Спросить про учёт токенов: on (рекомендуется) / off.
 10. Спросить про компакцию по контрольным точкам (`compact_policy`): `plugin` (рекомендуется — плагин team-compact компактит сессию автоматически после каждого шага пайплайна) / `prompt` (team-lead публикует строку `[COMPACT]`, заказчик компактит вручную ctrl+x c).
 11. Спросить про автопродолжение после компакции (`after_compaction_auto`): on (рекомендуется — конвейер продолжает сам после компакции каждого шага; team-lead сначала перечитывает state.json) / off (team-lead после каждой компакции ждёт заказчика). Спрашивать только при `compact_policy` = `plugin`; при `prompt` записать `false` (ручная компакция не продолжает автоматически).
-12. Создать `team-workspace/<slug>/` с директориями 00-requirements … 08-delivery и `tmp/`, `state.json` (схема — оркестрационная часть устава в `.opencode/agent/team-lead.md`, раздел state.json; settings заполнены из шагов 7–11) и `models.json`.
-13. `git init` + первичный коммит, если репозитория нет.
-14. Отчитаться заказчику: режим heartbeat; режим запуска; учёт токенов; политика компакции; автопродолжение; напоминание перезапустить opencode для применения моделей.
-15. Принять ТЗ.
+12. Спросить про контроль контекста субагентов (`context_guard`): on (рекомендуется — плагин team-compact проверяет заполнение контекста субагентов между шагами, не чаще раза в 3 минуты, и компактит субагента с автопродолжением при 60% заполнения) / off. При on уточнить порог и интервал; значения по умолчанию — `threshold_pct: 60`, `min_interval_min: 3`.
+13. Создать `team-workspace/<slug>/` с директориями 00-requirements … 08-delivery и `tmp/`, `state.json` (схема — оркестрационная часть устава в `.opencode/agent/team-lead.md`, раздел state.json; settings заполнены из шагов 7–12) и `models.json`.
+14. `git init` + первичный коммит, если репозитория нет.
+15. Отчитаться заказчику: режим heartbeat; режим запуска; учёт токенов; политика компакции; автопродолжение; контроль контекста субагентов; напоминание перезапустить opencode для применения моделей.
+16. Принять ТЗ.
 
 ## Режим `--settings`
 
 - Без опроса моделей. Без пересоздания workspace.
-- Только вопросы режимов: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
+- Только вопросы режимов: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto, context_guard.
 - Обновить `state.json → settings`; удалить устаревшие поля `custom_flow` / `show_subagent_prompt`.
 - `settings.regression_mode` здесь НЕ настраивается (team-lead спрашивает перед финальным тестированием).
 DEPLOY_EOF_.opencode_command_team-setup.md
@@ -1788,7 +1791,7 @@ agent: team-lead
 - режим запуска;
 - учёт токенов;
 - regression mode;
-- политику компакции (`compact_policy`) и автопродолжение (`after_compaction_auto`);
+- политику компакции (`compact_policy`), автопродолжение (`after_compaction_auto`) и контроль контекста субагентов (`context_guard`);
 - последнюю компакцию (последняя запись `compaction.log`: phase, step, ts) и незавершённый маркер контрольной точки (`.compact-pending.json`), если есть;
 - статусы всех 8 шлюзов качества (passed/checked_at/note);
 - routing hints, если есть;
@@ -1834,9 +1837,17 @@ write_file "$DST/.opencode/plugins/team-compact.js" <<'DEPLOY_EOF_.opencode_plug
 // Policy and continuation are configured in state.json -> settings:
 //   compact_policy: "plugin" | "prompt"   (default "plugin")
 //   after_compaction_auto: true | false   (default true; plugin policy only)
+//   context_guard: { enabled, threshold_pct, min_interval_min }
+//     Subagent sessions only: after every completed assistant message the plugin
+//     checks context fill against the model context limit (throttled to one check
+//     per min_interval_min, default 3) and requests compaction with auto=true
+//     when fill >= threshold_pct (default 60). The lead is compacted at step
+//     checkpoints instead.
 // Files it maintains in team-workspace/<slug>/:
 //   .compact-pending.json — transient checkpoint marker (created and consumed by this plugin)
-//   compaction.log        — JSONL journal (read-only for agents)
+//   compaction.log        — JSONL journal (read-only for agents); events: checkpoint,
+//     summarize_requested, summarize_failed, skipped, compacted,
+//     context_guard_compact_requested, context_guard_compact_failed, context_guard_skipped
 
 import { existsSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, readdirSync } from "node:fs"
 import { join } from "node:path"
@@ -1873,9 +1884,17 @@ function readState(workspace) {
 
 function readSettings(state) {
   const s = (state && state.settings) || {}
+  const guard = s.context_guard && typeof s.context_guard === "object" ? s.context_guard : {}
+  const pct = Number(guard.threshold_pct)
+  const min = Number(guard.min_interval_min)
   return {
     policy: s.compact_policy === "prompt" ? "prompt" : "plugin",
     auto: s.after_compaction_auto !== false,
+    guard: {
+      enabled: guard.enabled !== false,
+      thresholdPct: Number.isFinite(pct) ? Math.min(100, Math.max(1, pct)) : 60,
+      minIntervalMs: (Number.isFinite(min) && min > 0 ? min : 3) * 60 * 1000,
+    },
   }
 }
 
@@ -1965,6 +1984,134 @@ function buildSnapshot(state, pending) {
 
 export const TeamCompact = async ({ client, directory }) => {
   const busy = new Set()
+  const providerLimitCache = new Map()
+  const unknownLimitLogged = new Set()
+  const lastGuardCheck = new Map()
+
+  function contextTokens(tokens) {
+    return (
+      (tokens?.input ?? 0) +
+      (tokens?.cache?.read ?? 0) +
+      (tokens?.cache?.write ?? 0) +
+      (tokens?.output ?? 0) +
+      (tokens?.reasoning ?? 0)
+    )
+  }
+
+  async function contextLimit(providerID, modelID) {
+    const cacheKey = providerID + "/" + modelID
+    if (providerLimitCache.has(cacheKey)) return providerLimitCache.get(cacheKey)
+    let limit = null
+    try {
+      const res = await client.provider.list({ query: { directory } })
+      const providers = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+      const provider =
+        providers.find((p) => p?.id === providerID) ??
+        providers.find((p) => typeof p?.id === "string" && p.id.toLowerCase() === String(providerID).toLowerCase())
+      const model =
+        provider?.models?.[modelID] ??
+        (provider?.models ? Object.values(provider.models).find((m) => m?.id === modelID) : null)
+      const value = Number(model?.limit?.context)
+      if (Number.isFinite(value) && value > 0) limit = value
+    } catch {
+      // leave the limit unknown; the guard will skip
+    }
+    providerLimitCache.set(cacheKey, limit)
+    return limit
+  }
+
+  async function requestCompaction(sessionID, body) {
+    let result = null
+    try {
+      result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+    } catch (error) {
+      result = { error }
+    }
+    if (result && result.error) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      try {
+        result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+      } catch (error) {
+        result = { error }
+      }
+    }
+    return result
+  }
+
+  // Context guard: subagent sessions only. Runs after every completed assistant
+  // message, throttled to one check per settings.guard.minIntervalMs.
+  async function runContextGuard(info) {
+    try {
+      const role = info.agent ?? info.mode ?? null
+      if (!role || role === "team-lead" || role === "primary") return
+      const sessionID = info.sessionID
+      if (!sessionID || busy.has(sessionID)) return
+      const workspace = findActiveWorkspace(directory)
+      if (!workspace) return
+      if (existsSync(join(workspace, PENDING))) return // checkpoint compaction in flight
+      const state = readState(workspace)
+      if (!state || state.phase === "done") return
+      const settings = readSettings(state)
+      if (!settings.guard.enabled) return
+      const now = Date.now()
+      if (now - (lastGuardCheck.get(sessionID) ?? 0) < settings.guard.minIntervalMs) return
+      lastGuardCheck.set(sessionID, now)
+      const tokens = contextTokens(info.tokens)
+      if (!tokens) return
+      const limit = await contextLimit(info.providerID, info.modelID)
+      if (!limit) {
+        const modelKey = info.providerID + "/" + info.modelID
+        if (!unknownLimitLogged.has(modelKey)) {
+          unknownLimitLogged.add(modelKey)
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_skipped",
+            project: state.project,
+            session: sessionID,
+            reason: "unknown_context_limit",
+            model: modelKey,
+          })
+        }
+        return
+      }
+      const pct = Math.round((tokens / limit) * 100)
+      if (pct < settings.guard.thresholdPct) return
+      busy.add(sessionID)
+      try {
+        const body = { providerID: info.providerID, modelID: info.modelID, auto: true }
+        const base = {
+          project: state.project,
+          session: sessionID,
+          tokens,
+          context_limit: limit,
+          fill_pct: pct,
+          threshold_pct: settings.guard.thresholdPct,
+          auto: true,
+        }
+        const result = await requestCompaction(sessionID, body)
+        if (result && result.error) {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_failed",
+            ...base,
+            ok: false,
+            error: result.error?.message ?? String(result.error),
+          })
+        } else {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_requested",
+            ...base,
+            ok: true,
+          })
+        }
+      } finally {
+        busy.delete(sessionID)
+      }
+    } catch {
+      // never break the session because of the context guard
+    }
+  }
 
   async function resolveModel(sessionID, workspace) {
     try {
@@ -2092,6 +2239,20 @@ export const TeamCompact = async ({ client, directory }) => {
               project: projectOf(workspace),
               session: sessionID,
             })
+          }
+          return
+        }
+        if (event?.type === "message.updated") {
+          // context guard: subagent sessions only, throttled inside runContextGuard
+          const info = event.properties?.info
+          if (
+            info &&
+            info.role === "assistant" &&
+            info.providerID &&
+            info.modelID &&
+            (info.time?.completed !== undefined || info.finish !== undefined)
+          ) {
+            await runContextGuard(info)
           }
           return
         }
@@ -3073,12 +3234,21 @@ write_file "$DST/agent-team-spec.md" <<'DEPLOY_EOF_agent-team-spec.md'
 # ТЗ: Virtual Software Development Team
 ## Мультиагентная система для opencode
 
-**Версия:** 2.9-hybrid  
-**Дата:** 2026-11-04  
+**Версия:** 2.10-hybrid  
+**Дата:** 2026-11-05  
 **Статус:** финальная  
 **Основа:** v2.4 + усиления процессного управления + заимствования из GLM v2.5  
 
 Это единая техническая спецификация агентной системы «виртуальной команды разработки». Файл самодостаточен: на его основе можно с нуля создать аналогичную команду в любом проекте opencode.
+
+## Список изменений v2.10-hybrid
+
+Контроль контекста субагентов (context guard):
+
+1. Новый §5.23: плагин team-compact проверяет заполнение контекста субагентских сессий после каждого завершённого assistant-сообщения и при достижении порога запрашивает компакцию с `auto: true` (субагент продолжает работу со сводки). Сессия тимлида guard'ом не контролируется — её компактят контрольные точки шагов (§3.5, §5.21).
+2. Новые настройки: `settings.context_guard` (`{enabled, threshold_pct, min_interval_min}`, по умолчанию `{true, 60, 3}`), задаются в `/team-setup` (шаг 12).
+3. Новые события в `compaction.log`: `context_guard_compact_requested`, `context_guard_compact_failed`, `context_guard_skipped`.
+4. Новые критерии приёмки 73–76 (§13).
 
 ## Список изменений v2.9-hybrid
 
@@ -3426,6 +3596,8 @@ Requested decision:
 - `plugin` (по умолчанию): плагин team-compact компактит сессию на `session.idle` (см. §5.21) и подмешивает снимок `state.json` в сводку компакции. При `after_compaction_auto: true` конвейер продолжается автоматически; первое действие после компакции — перечитать `state.json`. При `after_compaction_auto: false` тимлид ждёт заказчика.
 - `prompt`: инструмент возвращает ручную инструкцию; тимлид публикует строку `[COMPACT]` (§6.4) и просит заказчика компактить (ctrl+x c / Compact session), затем продолжает только после этого, сначала перечитав `state.json`. `after_compaction_auto` к ручной компакции неприменим.
 
+Компакция субагентских сессий контрольными точками не управляется: за заполнением их контекста следит context guard плагина team-compact (§5.23); агентам ничего делать для этого не нужно.
+
 Запрещено: вызывать `team_checkpoint` до обновления `state.json`; дважды за шаг; на запросах `question`; внутри параллельной группы разработки. При ошибке инструмента: исправить `state.json`, повторить один раз; при повторной ошибке сообщить заказчику и перейти к поведению prompt.
 
 После каждой компакции снимок в сводке — только указатель: авторитетны `state.json` и артефакты, их нужно перечитать перед любыми действиями.
@@ -3453,7 +3625,10 @@ team-workspace/<slug>/
 ├── state.json          состояние пайплайна
 ├── models.json         назначение моделей по ролям
 ├── tokens.log          журнал расхода токенов, пишет плагин, читают агенты
-├── compaction.log      журнал компакций (JSONL), пишет плагин team-compact, читают агенты
+├── compaction.log      журнал компакций (JSONL), пишет плагин team-compact, читают агенты;
+│                       события: checkpoint, summarize_requested, summarize_failed, skipped,
+│                       compacted, context_guard_compact_requested, context_guard_compact_failed,
+│                       context_guard_skipped
 └── .compact-pending.json  транзиентный маркер контрольной точки, создаётся и поглощается плагином team-compact
 ```
 
@@ -3506,7 +3681,12 @@ Evidence: <commands, test results, when applicable>
     "tokens_log": true,
     "regression_mode": "changed",
     "compact_policy": "plugin",
-    "after_compaction_auto": true
+    "after_compaction_auto": true,
+    "context_guard": {
+      "enabled": true,
+      "threshold_pct": 60,
+      "min_interval_min": 3
+    }
   },
   "iterations": {
     "analysis": 0,
@@ -3631,6 +3811,7 @@ Evidence: <commands, test results, when applicable>
 24. `settings.compact_policy` задаётся в `/team-setup`. Значения: `plugin` (по умолчанию; плагин team-compact компактит сессию на контрольных точках шагов и подмешивает снимок `state.json` в сводку) или `prompt` (тимлид публикует `[COMPACT]`, заказчик компактит вручную ctrl+x c). Отсутствие означает `plugin`.
 25. `settings.after_compaction_auto` задаётся в `/team-setup`. При `true` (по умолчанию) компакция контрольной точки шага добавляет synthetic-ход «продолжить», и конвейер идёт сам; тимлид сначала перечитывает `state.json`. При `false` тимлид ждёт заказчика. Имеет смысл только при `compact_policy: plugin`; при `prompt` записывается `false` (ручная компакция не продолжает автоматически).
 26. `tasks[].contract` — путь к нарративному контракту `03-plan/contracts/T<N>.md`; `tasks[].contract_twin` — путь к отдельному JSON-двойнику `03-plan/contracts/T<N>.json`.
+27. `settings.context_guard` задаётся в `/team-setup`. `{"enabled": true, "threshold_pct": 60, "min_interval_min": 3}` по умолчанию. Отсутствие поля означает значения по умолчанию; `enabled: false` отключает контроль контекста субагентов (§5.23).
 
 ---
 
@@ -3961,9 +4142,9 @@ security → code-reviewer → tester → architect → unresolvable → custome
 - Плагин team-compact поглощает маркер контрольной точки на `session.idle`:
   - запрашивает компакцию сессии через summarize-API opencode с `auto = settings.after_compaction_auto`;
   - подмешивает детерминированный снимок `state.json` (project, request_type, phase, step, iterations, git, шлюзы качества, таблица задач, вопрос заказчику, незавершённая контрольная точка) в промпт компакции через хук `experimental.session.compacting`;
-  - добавляет одну JSONL-запись в `compaction.log` на каждое событие (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`).
+  - добавляет одну JSONL-запись в `compaction.log` на каждое событие (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`, а также события context guard'а — §5.23).
 - Модель для компакции берётся из последнего assistant-сообщения сессии с откатом на `models.json → team-lead`.
-- Маркер контрольной точки поглощается только главной сессией; сессии субагентов компакцию не запускают. Устаревший маркер (старше 15 минут) или `phase: done` очищает маркер без компакции.
+- Маркер контрольной точки поглощается только главной сессией; сессии субагентов компакцию не запускают (их контекст контролирует context guard — §5.23). Устаревший маркер (старше 15 минут) или `phase: done` очищает маркер без компакции.
 - При `compact_policy: prompt` плагин ничего не компактит: тимлид публикует `[COMPACT]`, заказчик компактит вручную (ctrl+x c); снимок `state.json` при этом всё равно подмешивается в любую ручную компакцию.
 - `tokens.log` и `compaction.log` — read-only для агентов; `.compact-pending.json` транзиентный и агентами не редактируется.
 - После каждой компакции `state.json` и артефакты перечитываются; сводка никогда не считается источником истины.
@@ -3989,6 +4170,23 @@ security → code-reviewer → tester → architect → unresolvable → custome
 - Никогда не отправлять секреты, учётные данные, персональные данные или код заказчика во внешние сервисы.
 - Не обходить матрицу инструментов через `bash`, `curl` или `wget` для исследований.
 - `security` и все остальные роли без внешних инструментов маршрутизируют внешние вопросы через тимлида к `researcher`.
+
+### 5.23. Контроль контекста субагентов (context guard)
+
+Плагин team-compact автоматически контролирует заполнение контекста субагентских сессий. Субагент не измеряет свой контекст сам — такого инструмента у него нет; вся механика исполняется плагином.
+
+Механика:
+
+1. После каждого завершённого assistant-сообщения сессии субагента (событие `message.updated` с финальным использованием токенов) плагин вычисляет заполнение контекста: `input + cache.read + cache.write + output + reasoning` последнего сообщения.
+2. Лимит контекста модели берётся из реестра провайдеров opencode (`limit.context`, models.dev) по `providerID/modelID` сообщения и кэшируется. Неизвестный лимит — guard пропускает сессию с событием `context_guard_skipped` (`reason: unknown_context_limit`).
+3. Проверки троттлятся: не чаще одного раза в `settings.context_guard.min_interval_min` (по умолчанию 3 минуты) на сессию.
+4. При заполнении ≥ `settings.context_guard.threshold_pct` (по умолчанию 60%) плагин запрашивает компакцию через summarize-API opencode с `auto: true` — субагент продолжает работу со сводки. Одна повторная попытка через 1 секунду при ошибке.
+5. Guard действует только на субагентские сессии (роль не `team-lead`/`primary`), только при активном пайплайне (`phase ≠ done`) и только при `settings.context_guard.enabled: true`.
+6. Guard не конкурирует с контрольными точками: при незавершённом маркере `.compact-pending.json` проверка пропускается; параллельные компакции одной сессии исключены общим набором занятых сессий плагина.
+
+События в `compaction.log`: `context_guard_compact_requested` (session, tokens, context_limit, fill_pct, threshold_pct, auto), `context_guard_compact_failed` (те же поля + error), `context_guard_skipped` (reason).
+
+Ограничения: компакция применяется на границе хода субагента; сводка не восстанавливает REPLY CONTRACT и structured_output по памяти — субагент после компакции руководствуется системным промптом своей роли и брифом задачи, которые сохраняются.
 
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
@@ -4357,7 +4555,7 @@ Frontmatter агента должен включать:
 Плагины (`.opencode/plugins/`):
 
 - `team-tokens.js` — учёт токенов в `tokens.log` (§5.16);
-- `team-compact.js` — контрольные точки шагов, компакция сессии согласно `settings.compact_policy`, подмешивание снимка `state.json`, `compaction.log` (§3.5, §5.21). Предоставляет инструмент `team_checkpoint`, доступный только `team-lead`.
+- `team-compact.js` — контрольные точки шагов, компакция сессии согласно `settings.compact_policy`, подмешивание снимка `state.json`, context guard субагентских сессий (§5.23), `compaction.log` (§3.5, §5.21). Предоставляет инструмент `team_checkpoint`, доступный только `team-lead`.
 
 Skills:
 
@@ -5202,24 +5400,29 @@ Skills:
    - off — тимлид после каждой компакции ждёт заказчика.
 
    Спрашивать только при `compact_policy` = `plugin`; при `prompt` записать `false` (ручная компакция не продолжает автоматически).
-12. Создать `team-workspace/<slug>/`:
-   - `00–08`;
+12. Спросить про контроль контекста субагентов (`context_guard`):
+   - on, рекомендуется — плагин team-compact проверяет заполнение контекста субагентов между шагами (не чаще раза в 3 минуты) и компактит субагента с автопродолжением при 60% заполнения;
+   - off.
+
+   При on уточнить порог и интервал; значения по умолчанию — `threshold_pct: 60`, `min_interval_min: 3`.
+13. Создать `team-workspace/<slug>/`:
+   - `00–08` и `tmp/`;
    - `state.json`;
    - `models.json`.
-13. `git init` + начальный коммит, если нет репозитория.
-14. Сообщить заказчику:
+14. `git init` + начальный коммит, если нет репозитория.
+15. Сообщить заказчику:
     - режим heartbeat;
     - режим запуска;
     - учёт токенов;
-    - политику компакции и автопродолжение;
+    - политику компакции, автопродолжение и контроль контекста субагентов;
     - напоминание перезапустить opencode.
-15. Принять ТЗ.
+16. Принять ТЗ.
 
 Режим `--settings`:
 
 - Без опроса моделей.
 - Без пересоздания рабочего пространства.
-- Только вопросы о режимах: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
+- Только вопросы о режимах: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto, context_guard.
 - Обновить `state.json → settings`.
 - Удалить устаревшие поля настроек.
 
@@ -5242,7 +5445,7 @@ Skills:
 - режим запуска;
 - учёт токенов;
 - режим регрессии;
-- политику компакции (`compact_policy`) и автопродолжение (`after_compaction_auto`);
+- политику компакции (`compact_policy`), автопродолжение (`after_compaction_auto`) и контроль контекста субагентов (`context_guard`);
 - последнюю компакцию (последняя запись `compaction.log`: phase, step, ts) и незавершённый маркер контрольной точки (`.compact-pending.json`), если есть;
 - статус шлюзов качества;
 - подсказки маршрутизации, если есть;
@@ -5536,6 +5739,10 @@ deploy.sh /path/to/project
 
 71. Временные файлы и временные среды создаются только в `team-workspace/<slug>/tmp`.
 72. После акцепта delivery team-lead удаляет каталог `tmp`.
+73. Context guard плагина team-compact контролирует только субагентские сессии; сессия тимлида компактится контрольными точками шагов.
+74. Проверка контекста субагента выполняется не чаще одного раза в `settings.context_guard.min_interval_min` минут; по умолчанию 3.
+75. Компакция субагента запускается при заполнении контекста ≥ `settings.context_guard.threshold_pct` (по умолчанию 60%) с `auto: true`.
+76. События guard'а (`context_guard_compact_requested`, `context_guard_compact_failed`, `context_guard_skipped`) записываются в `compaction.log` только плагином; агенты лог не редактируют.
 ## Приложение A. Обязательный скелет роли и блоки промптов
 
 Приложение A — обязательное содержимое для AGENTS.md и файлов агентов/skills. Блоки могут сужаться, но не ослабляться и не удаляться.

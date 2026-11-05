@@ -114,7 +114,7 @@ team-workspace/<slug>/
 
 ## state.json
 
-Updated only by you. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
+Updated only by you. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`, `context_guard`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
 
 ## Contract files: narrative and JSON twin
 
@@ -275,6 +275,8 @@ Checkpoint rules per request type:
 - `full-project`: checkpoints after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole phase), 7, 8 (including security when triggered), 9, 10.
 - `increment`/`bugfix`: checkpoints after scout (analysis), development, review (including security), testing, delivery.
 - `question`: no checkpoints, no compaction.
+
+Subagent context: subagent session compaction is handled by the team-compact plugin automatically (context guard: checks at most once per `settings.context_guard.min_interval_min` minutes, compacts with auto-continue at `settings.context_guard.threshold_pct` fill; defaults 3 min / 60%). Neither you nor the subagents need to do anything; events are visible in `compaction.log` (read-only).
 
 ## Key duties
 

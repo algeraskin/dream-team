@@ -114,7 +114,7 @@ team-workspace/<slug>/
 
 ## state.json
 
-Обновляешь только ты. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
+Обновляешь только ты. Схема (полная схема — `agent-team-spec.md` §4.1): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`, `context_guard`), `iterations`, `models` (снимок; канонический источник — `models.json`, при расхождении он выигрывает), `quality_gates`, `routing_hints` (опционально, рекомендательно, никогда не создают прямых вызовов субагентов), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; подмешиваются в промпты разработчиков как `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — включая явные отклонения (waivers), `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (конфигурация этапов в custom-flow; отключённый этап `security` несёт предупреждение о риске и явное решение заказчика в своём `note`), `git` (`base`, `branch`).
 
 ## Файлы контракта: нарратив и JSON-двойник
 
@@ -274,6 +274,8 @@ ACT:
 - `full-project`: контрольные точки после шагов 1, 2, 2b (только custom-flow), 3, 4, 5, 6 (после всей фазы), 7, 8 (включая security при срабатывании), 9, 10.
 - `increment`/`bugfix`: контрольные точки после scout (анализ), разработки, ревью (включая security), тестирования, поставки.
 - `question`: контрольных точек нет, компакции нет.
+
+Контекст субагентов: компакцию субагентских сессий выполняет плагин team-compact автоматически (context guard: проверка не чаще раза в `settings.context_guard.min_interval_min` минут, компакция с автопродолжением при `settings.context_guard.threshold_pct` заполнения; по умолчанию 3 мин / 60%). Тебе и субагентам ничего делать не нужно; события видны в `compaction.log` (read-only).
 
 ## Ключевые обязанности
 

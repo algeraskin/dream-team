@@ -21,7 +21,7 @@ agent: team-lead
 - режим запуска;
 - учёт токенов;
 - regression mode;
-- политику компакции (`compact_policy`) и автопродолжение (`after_compaction_auto`);
+- политику компакции (`compact_policy`), автопродолжение (`after_compaction_auto`) и контроль контекста субагентов (`context_guard`);
 - последнюю компакцию (последняя запись `compaction.log`: phase, step, ts) и незавершённый маркер контрольной точки (`.compact-pending.json`), если есть;
 - статусы всех 8 шлюзов качества (passed/checked_at/note);
 - routing hints, если есть;

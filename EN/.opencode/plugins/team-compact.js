@@ -5,9 +5,17 @@
 // Policy and continuation are configured in state.json -> settings:
 //   compact_policy: "plugin" | "prompt"   (default "plugin")
 //   after_compaction_auto: true | false   (default true; plugin policy only)
+//   context_guard: { enabled, threshold_pct, min_interval_min }
+//     Subagent sessions only: after every completed assistant message the plugin
+//     checks context fill against the model context limit (throttled to one check
+//     per min_interval_min, default 3) and requests compaction with auto=true
+//     when fill >= threshold_pct (default 60). The lead is compacted at step
+//     checkpoints instead.
 // Files it maintains in team-workspace/<slug>/:
 //   .compact-pending.json — transient checkpoint marker (created and consumed by this plugin)
-//   compaction.log        — JSONL journal (read-only for agents)
+//   compaction.log        — JSONL journal (read-only for agents); events: checkpoint,
+//     summarize_requested, summarize_failed, skipped, compacted,
+//     context_guard_compact_requested, context_guard_compact_failed, context_guard_skipped
 
 import { existsSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, readdirSync } from "node:fs"
 import { join } from "node:path"
@@ -44,9 +52,17 @@ function readState(workspace) {
 
 function readSettings(state) {
   const s = (state && state.settings) || {}
+  const guard = s.context_guard && typeof s.context_guard === "object" ? s.context_guard : {}
+  const pct = Number(guard.threshold_pct)
+  const min = Number(guard.min_interval_min)
   return {
     policy: s.compact_policy === "prompt" ? "prompt" : "plugin",
     auto: s.after_compaction_auto !== false,
+    guard: {
+      enabled: guard.enabled !== false,
+      thresholdPct: Number.isFinite(pct) ? Math.min(100, Math.max(1, pct)) : 60,
+      minIntervalMs: (Number.isFinite(min) && min > 0 ? min : 3) * 60 * 1000,
+    },
   }
 }
 
@@ -136,6 +152,134 @@ function buildSnapshot(state, pending) {
 
 export const TeamCompact = async ({ client, directory }) => {
   const busy = new Set()
+  const providerLimitCache = new Map()
+  const unknownLimitLogged = new Set()
+  const lastGuardCheck = new Map()
+
+  function contextTokens(tokens) {
+    return (
+      (tokens?.input ?? 0) +
+      (tokens?.cache?.read ?? 0) +
+      (tokens?.cache?.write ?? 0) +
+      (tokens?.output ?? 0) +
+      (tokens?.reasoning ?? 0)
+    )
+  }
+
+  async function contextLimit(providerID, modelID) {
+    const cacheKey = providerID + "/" + modelID
+    if (providerLimitCache.has(cacheKey)) return providerLimitCache.get(cacheKey)
+    let limit = null
+    try {
+      const res = await client.provider.list({ query: { directory } })
+      const providers = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+      const provider =
+        providers.find((p) => p?.id === providerID) ??
+        providers.find((p) => typeof p?.id === "string" && p.id.toLowerCase() === String(providerID).toLowerCase())
+      const model =
+        provider?.models?.[modelID] ??
+        (provider?.models ? Object.values(provider.models).find((m) => m?.id === modelID) : null)
+      const value = Number(model?.limit?.context)
+      if (Number.isFinite(value) && value > 0) limit = value
+    } catch {
+      // leave the limit unknown; the guard will skip
+    }
+    providerLimitCache.set(cacheKey, limit)
+    return limit
+  }
+
+  async function requestCompaction(sessionID, body) {
+    let result = null
+    try {
+      result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+    } catch (error) {
+      result = { error }
+    }
+    if (result && result.error) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      try {
+        result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+      } catch (error) {
+        result = { error }
+      }
+    }
+    return result
+  }
+
+  // Context guard: subagent sessions only. Runs after every completed assistant
+  // message, throttled to one check per settings.guard.minIntervalMs.
+  async function runContextGuard(info) {
+    try {
+      const role = info.agent ?? info.mode ?? null
+      if (!role || role === "team-lead" || role === "primary") return
+      const sessionID = info.sessionID
+      if (!sessionID || busy.has(sessionID)) return
+      const workspace = findActiveWorkspace(directory)
+      if (!workspace) return
+      if (existsSync(join(workspace, PENDING))) return // checkpoint compaction in flight
+      const state = readState(workspace)
+      if (!state || state.phase === "done") return
+      const settings = readSettings(state)
+      if (!settings.guard.enabled) return
+      const now = Date.now()
+      if (now - (lastGuardCheck.get(sessionID) ?? 0) < settings.guard.minIntervalMs) return
+      lastGuardCheck.set(sessionID, now)
+      const tokens = contextTokens(info.tokens)
+      if (!tokens) return
+      const limit = await contextLimit(info.providerID, info.modelID)
+      if (!limit) {
+        const modelKey = info.providerID + "/" + info.modelID
+        if (!unknownLimitLogged.has(modelKey)) {
+          unknownLimitLogged.add(modelKey)
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_skipped",
+            project: state.project,
+            session: sessionID,
+            reason: "unknown_context_limit",
+            model: modelKey,
+          })
+        }
+        return
+      }
+      const pct = Math.round((tokens / limit) * 100)
+      if (pct < settings.guard.thresholdPct) return
+      busy.add(sessionID)
+      try {
+        const body = { providerID: info.providerID, modelID: info.modelID, auto: true }
+        const base = {
+          project: state.project,
+          session: sessionID,
+          tokens,
+          context_limit: limit,
+          fill_pct: pct,
+          threshold_pct: settings.guard.thresholdPct,
+          auto: true,
+        }
+        const result = await requestCompaction(sessionID, body)
+        if (result && result.error) {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_failed",
+            ...base,
+            ok: false,
+            error: result.error?.message ?? String(result.error),
+          })
+        } else {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_requested",
+            ...base,
+            ok: true,
+          })
+        }
+      } finally {
+        busy.delete(sessionID)
+      }
+    } catch {
+      // never break the session because of the context guard
+    }
+  }
 
   async function resolveModel(sessionID, workspace) {
     try {
@@ -263,6 +407,20 @@ export const TeamCompact = async ({ client, directory }) => {
               project: projectOf(workspace),
               session: sessionID,
             })
+          }
+          return
+        }
+        if (event?.type === "message.updated") {
+          // context guard: subagent sessions only, throttled inside runContextGuard
+          const info = event.properties?.info
+          if (
+            info &&
+            info.role === "assistant" &&
+            info.providerID &&
+            info.modelID &&
+            (info.time?.completed !== undefined || info.finish !== undefined)
+          ) {
+            await runContextGuard(info)
           }
           return
         }

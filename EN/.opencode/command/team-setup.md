@@ -33,14 +33,15 @@ Agent: team-lead only. Arguments: $ARGUMENTS (project slug, or `--settings` for 
 9. Ask about token accounting: on (recommended) / off.
 10. Ask about step-checkpoint compaction (`compact_policy`): `plugin` (recommended — the team-compact plugin compacts the session automatically after every pipeline step) / `prompt` (the team-lead publishes a `[COMPACT]` line and the customer compacts manually with ctrl+x c).
 11. Ask about auto-continuation after compaction (`after_compaction_auto`): on (recommended — the pipeline continues by itself after each step compaction; the team-lead re-reads state.json first) / off (the team-lead waits for the customer after each compaction). Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
-12. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery and `tmp/`, `state.json` (schema — the charter orchestration part in `.opencode/agent/team-lead.md`, state.json section; settings filled from steps 7–11), and `models.json`.
-13. `git init` + initial commit if there is no repository.
-14. Report to the customer: heartbeat mode; launch mode; token accounting; compaction policy; auto-continuation; reminder to restart opencode to apply models.
-15. Hand over the ToR.
+12. Ask about subagent context control (`context_guard`): on (recommended — the team-compact plugin checks subagent context fill between steps, at most once per 3 minutes, and compacts the subagent with auto-continuation at 60% fill) / off. When on, clarify the threshold and interval; defaults are `threshold_pct: 60`, `min_interval_min: 3`.
+13. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery and `tmp/`, `state.json` (schema — the charter orchestration part in `.opencode/agent/team-lead.md`, state.json section; settings filled from steps 7–12), and `models.json`.
+14. `git init` + initial commit if there is no repository.
+15. Report to the customer: heartbeat mode; launch mode; token accounting; compaction policy; auto-continuation; subagent context control; reminder to restart opencode to apply models.
+16. Hand over the ToR.
 
 ## `--settings` mode
 
 - No model poll. No workspace re-creation.
-- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
+- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto, context_guard.
 - Update `state.json → settings`; remove legacy `custom_flow` / `show_subagent_prompt` fields.
 - `settings.regression_mode` is NOT configured here (the team-lead asks before final testing).

@@ -1412,7 +1412,7 @@ team-workspace/<slug>/
 
 ## state.json
 
-Updated only by you. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
+Updated only by you. Schema (see `agent-team-spec.md` §4.1 for the full schema): `project`, `created_at`, `updated_at`, `phase` (`requirements|analysis|architecture|planning|development|integration|testing|delivery|done`), `request_type` (`full-project|increment|bugfix|question`), `step`, `settings` (`heartbeat`, `launch_mode: auto|confirm|custom-flow`, `tokens_log`, `regression_mode: changed|full`, `compact_policy: plugin|prompt`, `after_compaction_auto`, `context_guard`), `iterations`, `models` (snapshot; `models.json` is canonical and wins on mismatch), `quality_gates`, `routing_hints` (optional, advisory, never creating direct subagent calls), `learnings` (`common_issues`, `user_preferences`, `project_patterns`; injected into developer prompts as `KNOWN ISSUES`), `tasks[]` (`id`, `title`, `status`, `assignee`, `depends_on`, `parallel_group`, `contract`, `contract_twin`, `code_paths`, `artifacts`, `auto_launch`, `note` — including explicit waivers, `contract_twin_status: missing|invalid|valid`, `security_sensitive`, `executable_feedback_status: missing|failed|passed|waived`, `review_status`), `customer_question`, `flow` (stage configuration in custom-flow; disabled `security` stage carries the risk warning and the customer's explicit decision in its `note`), `git` (`base`, `branch`).
 
 ## Contract files: narrative and JSON twin
 
@@ -1573,6 +1573,8 @@ Checkpoint rules per request type:
 - `full-project`: checkpoints after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole phase), 7, 8 (including security when triggered), 9, 10.
 - `increment`/`bugfix`: checkpoints after scout (analysis), development, review (including security), testing, delivery.
 - `question`: no checkpoints, no compaction.
+
+Subagent context: subagent session compaction is handled by the team-compact plugin automatically (context guard: checks at most once per `settings.context_guard.min_interval_min` minutes, compacts with auto-continue at `settings.context_guard.threshold_pct` fill; defaults 3 min / 60%). Neither you nor the subagents need to do anything; events are visible in `compaction.log` (read-only).
 
 ## Key duties
 
@@ -1752,15 +1754,16 @@ Agent: team-lead only. Arguments: $ARGUMENTS (project slug, or `--settings` for 
 9. Ask about token accounting: on (recommended) / off.
 10. Ask about step-checkpoint compaction (`compact_policy`): `plugin` (recommended — the team-compact plugin compacts the session automatically after every pipeline step) / `prompt` (the team-lead publishes a `[COMPACT]` line and the customer compacts manually with ctrl+x c).
 11. Ask about auto-continuation after compaction (`after_compaction_auto`): on (recommended — the pipeline continues by itself after each step compaction; the team-lead re-reads state.json first) / off (the team-lead waits for the customer after each compaction). Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
-12. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery and `tmp/`, `state.json` (schema — the charter orchestration part in `.opencode/agent/team-lead.md`, state.json section; settings filled from steps 7–11), and `models.json`.
-13. `git init` + initial commit if there is no repository.
-14. Report to the customer: heartbeat mode; launch mode; token accounting; compaction policy; auto-continuation; reminder to restart opencode to apply models.
-15. Hand over the ToR.
+12. Ask about subagent context control (`context_guard`): on (recommended — the team-compact plugin checks subagent context fill between steps, at most once per 3 minutes, and compacts the subagent with auto-continuation at 60% fill) / off. When on, clarify the threshold and interval; defaults are `threshold_pct: 60`, `min_interval_min: 3`.
+13. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery and `tmp/`, `state.json` (schema — the charter orchestration part in `.opencode/agent/team-lead.md`, state.json section; settings filled from steps 7–12), and `models.json`.
+14. `git init` + initial commit if there is no repository.
+15. Report to the customer: heartbeat mode; launch mode; token accounting; compaction policy; auto-continuation; subagent context control; reminder to restart opencode to apply models.
+16. Hand over the ToR.
 
 ## `--settings` mode
 
 - No model poll. No workspace re-creation.
-- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
+- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto, context_guard.
 - Update `state.json → settings`; remove legacy `custom_flow` / `show_subagent_prompt` fields.
 - `settings.regression_mode` is NOT configured here (the team-lead asks before final testing).
 DEPLOY_EOF_.opencode_command_team-setup.md
@@ -1789,7 +1792,7 @@ Show:
 - launch mode;
 - token accounting;
 - regression mode;
-- compaction policy (`compact_policy`) and auto-continuation (`after_compaction_auto`);
+- compaction policy (`compact_policy`), auto-continuation (`after_compaction_auto`), and subagent context control (`context_guard`);
 - last compaction (last record of `compaction.log`: phase, step, ts) and any pending checkpoint marker (`.compact-pending.json`);
 - quality gate status (all 8 gates: passed/checked_at/note);
 - routing hints if present;
@@ -1835,9 +1838,17 @@ write_file "$DST/.opencode/plugins/team-compact.js" <<'DEPLOY_EOF_.opencode_plug
 // Policy and continuation are configured in state.json -> settings:
 //   compact_policy: "plugin" | "prompt"   (default "plugin")
 //   after_compaction_auto: true | false   (default true; plugin policy only)
+//   context_guard: { enabled, threshold_pct, min_interval_min }
+//     Subagent sessions only: after every completed assistant message the plugin
+//     checks context fill against the model context limit (throttled to one check
+//     per min_interval_min, default 3) and requests compaction with auto=true
+//     when fill >= threshold_pct (default 60). The lead is compacted at step
+//     checkpoints instead.
 // Files it maintains in team-workspace/<slug>/:
 //   .compact-pending.json — transient checkpoint marker (created and consumed by this plugin)
-//   compaction.log        — JSONL journal (read-only for agents)
+//   compaction.log        — JSONL journal (read-only for agents); events: checkpoint,
+//     summarize_requested, summarize_failed, skipped, compacted,
+//     context_guard_compact_requested, context_guard_compact_failed, context_guard_skipped
 
 import { existsSync, readFileSync, writeFileSync, appendFileSync, unlinkSync, readdirSync } from "node:fs"
 import { join } from "node:path"
@@ -1874,9 +1885,17 @@ function readState(workspace) {
 
 function readSettings(state) {
   const s = (state && state.settings) || {}
+  const guard = s.context_guard && typeof s.context_guard === "object" ? s.context_guard : {}
+  const pct = Number(guard.threshold_pct)
+  const min = Number(guard.min_interval_min)
   return {
     policy: s.compact_policy === "prompt" ? "prompt" : "plugin",
     auto: s.after_compaction_auto !== false,
+    guard: {
+      enabled: guard.enabled !== false,
+      thresholdPct: Number.isFinite(pct) ? Math.min(100, Math.max(1, pct)) : 60,
+      minIntervalMs: (Number.isFinite(min) && min > 0 ? min : 3) * 60 * 1000,
+    },
   }
 }
 
@@ -1966,6 +1985,134 @@ function buildSnapshot(state, pending) {
 
 export const TeamCompact = async ({ client, directory }) => {
   const busy = new Set()
+  const providerLimitCache = new Map()
+  const unknownLimitLogged = new Set()
+  const lastGuardCheck = new Map()
+
+  function contextTokens(tokens) {
+    return (
+      (tokens?.input ?? 0) +
+      (tokens?.cache?.read ?? 0) +
+      (tokens?.cache?.write ?? 0) +
+      (tokens?.output ?? 0) +
+      (tokens?.reasoning ?? 0)
+    )
+  }
+
+  async function contextLimit(providerID, modelID) {
+    const cacheKey = providerID + "/" + modelID
+    if (providerLimitCache.has(cacheKey)) return providerLimitCache.get(cacheKey)
+    let limit = null
+    try {
+      const res = await client.provider.list({ query: { directory } })
+      const providers = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+      const provider =
+        providers.find((p) => p?.id === providerID) ??
+        providers.find((p) => typeof p?.id === "string" && p.id.toLowerCase() === String(providerID).toLowerCase())
+      const model =
+        provider?.models?.[modelID] ??
+        (provider?.models ? Object.values(provider.models).find((m) => m?.id === modelID) : null)
+      const value = Number(model?.limit?.context)
+      if (Number.isFinite(value) && value > 0) limit = value
+    } catch {
+      // leave the limit unknown; the guard will skip
+    }
+    providerLimitCache.set(cacheKey, limit)
+    return limit
+  }
+
+  async function requestCompaction(sessionID, body) {
+    let result = null
+    try {
+      result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+    } catch (error) {
+      result = { error }
+    }
+    if (result && result.error) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      try {
+        result = await client.session.summarize({ path: { id: sessionID }, body, query: { directory } })
+      } catch (error) {
+        result = { error }
+      }
+    }
+    return result
+  }
+
+  // Context guard: subagent sessions only. Runs after every completed assistant
+  // message, throttled to one check per settings.guard.minIntervalMs.
+  async function runContextGuard(info) {
+    try {
+      const role = info.agent ?? info.mode ?? null
+      if (!role || role === "team-lead" || role === "primary") return
+      const sessionID = info.sessionID
+      if (!sessionID || busy.has(sessionID)) return
+      const workspace = findActiveWorkspace(directory)
+      if (!workspace) return
+      if (existsSync(join(workspace, PENDING))) return // checkpoint compaction in flight
+      const state = readState(workspace)
+      if (!state || state.phase === "done") return
+      const settings = readSettings(state)
+      if (!settings.guard.enabled) return
+      const now = Date.now()
+      if (now - (lastGuardCheck.get(sessionID) ?? 0) < settings.guard.minIntervalMs) return
+      lastGuardCheck.set(sessionID, now)
+      const tokens = contextTokens(info.tokens)
+      if (!tokens) return
+      const limit = await contextLimit(info.providerID, info.modelID)
+      if (!limit) {
+        const modelKey = info.providerID + "/" + info.modelID
+        if (!unknownLimitLogged.has(modelKey)) {
+          unknownLimitLogged.add(modelKey)
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_skipped",
+            project: state.project,
+            session: sessionID,
+            reason: "unknown_context_limit",
+            model: modelKey,
+          })
+        }
+        return
+      }
+      const pct = Math.round((tokens / limit) * 100)
+      if (pct < settings.guard.thresholdPct) return
+      busy.add(sessionID)
+      try {
+        const body = { providerID: info.providerID, modelID: info.modelID, auto: true }
+        const base = {
+          project: state.project,
+          session: sessionID,
+          tokens,
+          context_limit: limit,
+          fill_pct: pct,
+          threshold_pct: settings.guard.thresholdPct,
+          auto: true,
+        }
+        const result = await requestCompaction(sessionID, body)
+        if (result && result.error) {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_failed",
+            ...base,
+            ok: false,
+            error: result.error?.message ?? String(result.error),
+          })
+        } else {
+          logLine(workspace, {
+            ts: new Date().toISOString(),
+            event: "context_guard_compact_requested",
+            ...base,
+            ok: true,
+          })
+        }
+      } finally {
+        busy.delete(sessionID)
+      }
+    } catch {
+      // never break the session because of the context guard
+    }
+  }
 
   async function resolveModel(sessionID, workspace) {
     try {
@@ -2093,6 +2240,20 @@ export const TeamCompact = async ({ client, directory }) => {
               project: projectOf(workspace),
               session: sessionID,
             })
+          }
+          return
+        }
+        if (event?.type === "message.updated") {
+          // context guard: subagent sessions only, throttled inside runContextGuard
+          const info = event.properties?.info
+          if (
+            info &&
+            info.role === "assistant" &&
+            info.providerID &&
+            info.modelID &&
+            (info.time?.completed !== undefined || info.finish !== undefined)
+          ) {
+            await runContextGuard(info)
           }
           return
         }
@@ -3075,12 +3236,21 @@ write_file "$DST/agent-team-spec.md" <<'DEPLOY_EOF_agent-team-spec.md'
 # ToR: Virtual Software Development Team
 ## Multi-agent system for opencode
 
-**Version:** 2.9-hybrid  
-**Date:** 2026-11-04  
+**Version:** 2.10-hybrid  
+**Date:** 2026-11-05  
 **Status:** final  
 **Base:** v2.4 + process governance enhancements + GLM v2.5 borrowings  
 
 This is the unified technical specification for the “virtual development team” agent system. The file is self-contained: an analogous team can be created from it in any opencode project from scratch.
+
+## Changelog v2.10-hybrid
+
+Subagent context guard:
+
+1. New §5.23: the team-compact plugin checks subagent session context fill after every completed assistant message and requests compaction with `auto: true` once the threshold is reached (the subagent continues from the summary). The lead's session is not guarded — step checkpoints compact it (§3.5, §5.21).
+2. New settings: `settings.context_guard` (`{enabled, threshold_pct, min_interval_min}`, default `{true, 60, 3}`), set in `/team-setup` (step 12).
+3. New `compaction.log` events: `context_guard_compact_requested`, `context_guard_compact_failed`, `context_guard_skipped`.
+4. New acceptance criteria 73–76 (§13).
 
 ## Changelog v2.9-hybrid
 
@@ -3428,6 +3598,8 @@ Behavior per `settings.compact_policy`:
 - `plugin` (default): the team-compact plugin compacts the session on `session.idle` (see §5.21) and injects a `state.json` snapshot into the compaction summary. With `after_compaction_auto: true` the pipeline continues automatically; the first action after compaction is re-reading `state.json`. With `after_compaction_auto: false` the team lead waits for the customer.
 - `prompt`: the tool returns a manual instruction; the team lead publishes the `[COMPACT]` line (§6.4) and asks the customer to compact (ctrl+x c / Compact session), then continues only after the customer does, re-reading `state.json` first. `after_compaction_auto` is not applicable to manual compaction.
 
+Subagent session compaction is not driven by checkpoints: the team-compact plugin's context guard watches their context fill (§5.23); agents need to do nothing for it.
+
 Forbidden: calling `team_checkpoint` before updating `state.json`; twice per step; on `question` requests; inside a parallel development group. On a tool error: fix `state.json`, retry once; on repeated failure tell the customer and fall back to the prompt behavior.
 
 After every compaction the snapshot in the summary is only a pointer: `state.json` and artifacts are authoritative and must be re-read before acting.
@@ -3455,7 +3627,10 @@ team-workspace/<slug>/
 ├── state.json          pipeline state
 ├── models.json         model assignment per role
 ├── tokens.log          token usage log, plugin writes, agents read
-├── compaction.log      compaction journal (JSONL), team-compact plugin writes, agents read
+├── compaction.log      compaction journal (JSONL), team-compact plugin writes, agents read;
+│                       events: checkpoint, summarize_requested, summarize_failed, skipped,
+│                       compacted, context_guard_compact_requested, context_guard_compact_failed,
+│                       context_guard_skipped
 └── .compact-pending.json  transient checkpoint marker, created and consumed by the team-compact plugin
 ```
 
@@ -3508,7 +3683,12 @@ Evidence: <commands, test results, when applicable>
     "tokens_log": true,
     "regression_mode": "changed",
     "compact_policy": "plugin",
-    "after_compaction_auto": true
+    "after_compaction_auto": true,
+    "context_guard": {
+      "enabled": true,
+      "threshold_pct": 60,
+      "min_interval_min": 3
+    }
   },
   "iterations": {
     "analysis": 0,
@@ -3633,6 +3813,7 @@ Evidence: <commands, test results, when applicable>
 24. `settings.compact_policy` is set at `/team-setup`. Values: `plugin` (default; the team-compact plugin compacts the session at step checkpoints and injects a `state.json` snapshot into the summary) or `prompt` (the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c). Missing means `plugin`.
 25. `settings.after_compaction_auto` is set at `/team-setup`. When `true` (default), a step-checkpoint compaction adds a synthetic continue turn and the pipeline proceeds by itself; the team lead re-reads `state.json` first. When `false`, the team lead waits for the customer. Meaningful only with `compact_policy: plugin`; with `prompt` the value is written as `false` (manual compaction never auto-continues).
 26. `tasks[].contract` is the path to the narrative contract `03-plan/contracts/T<N>.md`; `tasks[].contract_twin` is the path to the separate JSON twin `03-plan/contracts/T<N>.json`.
+27. `settings.context_guard` is set at `/team-setup`. Defaults `{"enabled": true, "threshold_pct": 60, "min_interval_min": 3}`. A missing field means defaults; `enabled: false` disables subagent context control (§5.23).
 
 ---
 
@@ -3963,9 +4144,9 @@ After delivery:
 - The `team-compact` plugin consumes the checkpoint marker on `session.idle`:
   - requests session compaction via the opencode summarize API with `auto = settings.after_compaction_auto`;
   - injects a deterministic `state.json` snapshot (project, request type, phase, step, iterations, git, quality gates, task table, customer question, pending checkpoint) into the compaction prompt via the `experimental.session.compacting` hook;
-  - appends one JSONL record to `compaction.log` per event (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`).
+  - appends one JSONL record to `compaction.log` per event (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`, plus context guard events — §5.23).
 - The model for compaction is taken from the last assistant message of the session, with fallback to `models.json → team-lead`.
-- A checkpoint marker is consumed by the main session only; subagent sessions never trigger compaction. A stale marker (older than 15 minutes) or `phase: done` clears the marker without compacting.
+- A checkpoint marker is consumed by the main session only; subagent sessions never trigger compaction (their context is watched by the context guard — §5.23). A stale marker (older than 15 minutes) or `phase: done` clears the marker without compacting.
 - With `compact_policy: prompt` the plugin compacts nothing: the team lead publishes `[COMPACT]` and the customer compacts manually (ctrl+x c); the `state.json` snapshot is still injected into any manual compaction.
 - `tokens.log` and `compaction.log` are read-only for agents; `.compact-pending.json` is transient and never edited by agents.
 - After every compaction, `state.json` and artifacts are re-read; the summary is never treated as a source of truth.
@@ -3991,6 +4172,23 @@ Rules:
 - Never send secrets, credentials, personal data, or customer code to external services.
 - Do not bypass the tool matrix with `bash`, `curl`, or `wget` for research.
 - `security` and all other roles without external tools route external questions through the team lead to `researcher`.
+
+### 5.23. Subagent context guard
+
+The team-compact plugin automatically monitors context fill of subagent sessions. A subagent never measures its own context — it has no tool for that; all mechanics run inside the plugin.
+
+Mechanics:
+
+1. After every completed assistant message of a subagent session (a `message.updated` event carrying final token usage), the plugin computes context fill: `input + cache.read + cache.write + output + reasoning` of the last message.
+2. The model context limit is taken from the opencode provider registry (`limit.context`, models.dev) by the message's `providerID/modelID` and cached. Unknown limit — the guard skips the session with a `context_guard_skipped` event (`reason: unknown_context_limit`).
+3. Checks are throttled: at most once per `settings.context_guard.min_interval_min` (default 3 minutes) per session.
+4. When fill ≥ `settings.context_guard.threshold_pct` (default 60%), the plugin requests compaction via the opencode summarize API with `auto: true` — the subagent continues from the summary. One retry after 1 second on error.
+5. The guard applies only to subagent sessions (role not `team-lead`/`primary`), only while the pipeline is active (`phase ≠ done`), and only when `settings.context_guard.enabled: true`.
+6. The guard does not compete with checkpoints: while a `.compact-pending.json` marker exists, the check is skipped; concurrent compactions of one session are excluded by the plugin's shared busy set.
+
+Events in `compaction.log`: `context_guard_compact_requested` (session, tokens, context_limit, fill_pct, threshold_pct, auto), `context_guard_compact_failed` (same fields + error), `context_guard_skipped` (reason).
+
+Limitation: compaction takes effect at the subagent's turn boundary; the summary does not restore REPLY CONTRACT and structured_output from memory — after compaction the subagent follows its role system prompt and the task brief, which are preserved.
 
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
@@ -4360,7 +4558,7 @@ The agent file body is the role system prompt. It must open with the standard ro
 Plugins (`.opencode/plugins/`):
 
 - `team-tokens.js` — token accounting into `tokens.log` (§5.16);
-- `team-compact.js` — step checkpoints, session compaction per `settings.compact_policy`, `state.json` snapshot injection, `compaction.log` (§3.5, §5.21). It provides the `team_checkpoint` tool available only to `team-lead`.
+- `team-compact.js` — step checkpoints, session compaction per `settings.compact_policy`, `state.json` snapshot injection, subagent context guard (§5.23), `compaction.log` (§3.5, §5.21). It provides the `team_checkpoint` tool available only to `team-lead`.
 
 Skills:
 
@@ -5205,24 +5403,29 @@ Steps:
    - off — the team lead waits for the customer after each compaction.
 
    Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
-12. Create `team-workspace/<slug>/`:
-   - `00–08`;
+12. Ask about subagent context control (`context_guard`):
+   - on, recommended — the team-compact plugin checks subagent context fill between steps (at most once per 3 minutes) and compacts the subagent with auto-continuation at 60% fill;
+   - off.
+
+   When on, clarify the threshold and interval; defaults are `threshold_pct: 60`, `min_interval_min: 3`.
+13. Create `team-workspace/<slug>/`:
+   - `00–08` and `tmp/`;
    - `state.json`;
    - `models.json`.
-13. `git init` + initial commit if there is no repository.
-14. Report to the customer:
+14. `git init` + initial commit if there is no repository.
+15. Report to the customer:
     - heartbeat mode;
     - launch mode;
     - token accounting;
-    - compaction policy and auto-continuation;
+    - compaction policy, auto-continuation, and subagent context control;
     - reminder to restart opencode.
-15. Hand over the ToR.
+16. Hand over the ToR.
 
 `--settings` mode:
 
 - No model poll.
 - No workspace re-creation.
-- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
+- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto, context_guard.
 - Update `state.json → settings`.
 - Remove legacy settings fields.
 
@@ -5245,7 +5448,7 @@ Show:
 - launch mode;
 - token accounting;
 - regression mode;
-- compaction policy (`compact_policy`) and auto-continuation (`after_compaction_auto`);
+- compaction policy (`compact_policy`), auto-continuation (`after_compaction_auto`), and subagent context control (`context_guard`);
 - last compaction (latest `compaction.log` record: phase, step, ts) and any pending checkpoint marker (`.compact-pending.json`);
 - quality gate status;
 - routing hints if present;
@@ -5539,6 +5742,10 @@ Then:
 
 71. Temporary files and environments are created only under `team-workspace/<slug>/tmp`.
 72. After delivery acceptance the team-lead deletes the `tmp` directory.
+73. The team-compact plugin's context guard watches only subagent sessions; the team lead's session is compacted by step checkpoints.
+74. A subagent context check runs at most once per `settings.context_guard.min_interval_min` minutes; default 3.
+75. Subagent compaction triggers at context fill ≥ `settings.context_guard.threshold_pct` (default 60%) with `auto: true`.
+76. Guard events (`context_guard_compact_requested`, `context_guard_compact_failed`, `context_guard_skipped`) are written to `compaction.log` by the plugin only; agents never edit the log.
 ## Appendix A. Mandatory Role Skeleton and Prompt Blocks
 
 Appendix A is required content for AGENTS.md and agent files/skills. Blocks may be narrowed, but not weakened or removed.
