@@ -35,7 +35,7 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 ## 6. Workflow and phase quality gates
 
-→ Orchestration part: `.opencode/agent/team-lead.md`, sections "Workflow and phase quality gates" and "Step checkpoints and session compaction". Role-level gate requirements are duplicated in the corresponding agent files.
+→ Orchestration part: `.opencode/agent/team-lead.md`, sections "Workflow and phase quality gates" and "Step checkpoints and session compaction". Role-level gate requirements are duplicated in the corresponding agent files. Session compaction at step checkpoints follows `settings.compact_policy` (`plugin` — automatic via the team-compact plugin, with `after_compaction_auto` continuing the pipeline; `prompt` — manual by the customer); missing means `plugin`.
 
 ## 7. Decision cards
 
