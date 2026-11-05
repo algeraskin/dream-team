@@ -1266,12 +1266,11 @@ A decision card must always contain:
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["AGENTS.md"],
   "default_agent": "team-lead",
-  "small_model": "ozon/AgentLLM-small",
   "share": "disabled"
 }
 ```
 
-`deploy.sh` merges optional MCP servers (`context7`, `fetch`, `ddg-search`) into this file; they are not required for the team to run. On opencode V2 the servers are written under `mcp.servers`; on 1.x the legacy top-level `mcp` map is used. Agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
+The `small_model` setting is not set: opencode picks a cheaper model from the provider for lightweight tasks (session titles etc.) on its own, falling back to the main model if none exists. `deploy.sh` merges optional MCP servers (`context7`, `fetch`, `ddg-search`) into this file; they are not required for the team to run. On opencode V2 the servers are written under `mcp.servers`; on 1.x the legacy top-level `mcp` map is used. Agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
 
 Agent frontmatter must include:
 
@@ -2103,40 +2102,46 @@ Steps:
 
 1. Project slug from arguments or by asking the customer.
 2. Repeat-onboarding check: if `models.json` exists, show it and ask.
-3. Available models list: `opencode models`; fallback — known provider list.
-4. Poll for 12 roles one at a time via `question`:
-   - “Model for role `<role>`” with hints and recommendations.
-5. Write `model:` into each `.opencode/agent/<role>.md` frontmatter.
-6. Ask about progress mode (heartbeat):
+3. Available models list: `opencode models`; fallback — known provider list. Propose only models from the actual available list; concrete names are not hard-coded in `/team-setup` and are never invented.
+4. Ask "Configure models by tier or individually?" (options: "By tier (recommended)" / "Individually (12 questions)").
+5. Configure models:
+   - **By tier** — one question per tier via `question` (redefine an individual role by editing `models.json`):
+   - Tier A — flagship: `team-lead`, `architect`; recommendation — the top (flagship) of the available models; heavy reasoning (orchestration, design).
+   - Tier Dev — code generation: `backend-dev`, `frontend-dev`; recommendation — the top (flagship) of the available models; code + executable feedback.
+   - Tier B — mid: `tester`, `analyst`, `code-reviewer`, `security`; recommendation — the top of the available models, a light one acceptable; structured text, autotests; review and vulnerability findings against acceptance criteria.
+   - Tier C — small: `scout`, `researcher`, `integrator`, `devops`; recommendation — a light (small/fast) one of the available models; search, summarization, git/CI mechanics, the most frequent calls.
+   - **Individually** — one question per each of the 12 roles with a hint: the role's tier default and its profile.
+6. Write `model:` into each `.opencode/agent/<role>.md` frontmatter.
+7. Ask about progress mode (heartbeat):
    - on, recommended;
    - off.
-7. Ask about subagent launch mode:
+8. Ask about subagent launch mode:
    - `auto`, recommended;
    - `confirm`;
    - `custom-flow`.
-8. Ask about token accounting:
+9. Ask about token accounting:
    - on, recommended;
    - off.
-9. Ask about step-checkpoint compaction (`compact_policy`):
+10. Ask about step-checkpoint compaction (`compact_policy`):
    - `plugin`, recommended — the team-compact plugin compacts the session automatically after every pipeline step;
    - `prompt` — the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c.
-10. Ask about auto-continuation after compaction (`after_compaction_auto`):
+11. Ask about auto-continuation after compaction (`after_compaction_auto`):
    - on, recommended — the pipeline continues by itself after each step compaction (the team lead re-reads `state.json` first);
    - off — the team lead waits for the customer after each compaction.
 
    Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
-11. Create `team-workspace/<slug>/`:
+12. Create `team-workspace/<slug>/`:
    - `00–08`;
    - `state.json`;
    - `models.json`.
-12. `git init` + initial commit if there is no repository.
-13. Report to the customer:
+13. `git init` + initial commit if there is no repository.
+14. Report to the customer:
     - heartbeat mode;
     - launch mode;
     - token accounting;
     - compaction policy and auto-continuation;
     - reminder to restart opencode.
-14. Hand over the ToR.
+15. Hand over the ToR.
 
 `--settings` mode:
 
@@ -2323,7 +2328,7 @@ Then:
 
 ### Onboarding and setup
 
-1. `/team-setup` polls models for all 12 roles and records them in agent files and `models.json`.
+1. `/team-setup` polls models by tier (A/Dev/B/C; covers all 12 roles) and records them in agent files and `models.json`.
 2. `/team-setup` configures heartbeat, launch_mode, and tokens_log.
 3. `/team-setup --settings` changes only active project modes without model poll or workspace re-creation.
 
