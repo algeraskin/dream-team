@@ -378,6 +378,7 @@ team-workspace/<slug>/
 ├── 06-integration/     build and infrastructure reports
 ├── 07-testing/         testing reports, autotests
 ├── 08-delivery/        final report and final versions of artifacts
+├── tmp/                agents' temporary files and environments (created on demand, deleted after delivery acceptance)
 ├── state.json          pipeline state
 ├── models.json         model assignment per role
 ├── tokens.log          token usage log, plugin writes, agents read
@@ -392,9 +393,10 @@ team-workspace/<slug>/
 3. Previous versions are never overwritten.
 4. Every contract consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). They are authored, reviewed, and updated together; the twin is never embedded in the markdown. Contract filenames use the task ID without `-v<N>`; a revised contract updates both files together.
 5. Project code lives outside `team-workspace`, except reports and autotests where explicitly defined.
-6. `tokens.log` and `compaction.log` are read-only for agents.
-7. After delivery, drafts and all previous `-v<N>` versions are deleted. Final versions remain in `00–07`, outcomes in `08-delivery`.
-8. `.compact-pending.json` is a transient service file of the team-compact plugin, not an artifact; agents never edit it.
+6. Agents create temporary files and environments only under `team-workspace/<slug>/tmp`; the `tmp` directory is not an artifact and is deleted by the team-lead after delivery acceptance.
+7. `tokens.log` and `compaction.log` are read-only for agents.
+8. After delivery, drafts and all previous `-v<N>` versions are deleted. Final versions remain in `00–07`, outcomes in `08-delivery`.
+9. `.compact-pending.json` is a transient service file of the team-compact plugin, not an artifact; agents never edit it.
 
 ### Artifact header template
 
@@ -2462,6 +2464,8 @@ Then:
 
 ---
 
+71. Temporary files and environments are created only under `team-workspace/<slug>/tmp`.
+72. After delivery acceptance the team-lead deletes the `tmp` directory.
 ## Appendix A. Mandatory Role Skeleton and Prompt Blocks
 
 Appendix A is required content for AGENTS.md and agent files/skills. Blocks may be narrowed, but not weakened or removed.

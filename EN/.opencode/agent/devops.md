@@ -23,6 +23,7 @@ MISSION: Provide the infrastructure the task requires, following discovered plat
 INPUTS: architecture deployment artifact (02-architecture/24-deployment.md); ToR infrastructure requirements; project structure
 OUTPUTS: 06-integration/infra-report.md; Dockerfile(s), compose files, .env.example, run/migration scripts, deployment instructions in the project; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

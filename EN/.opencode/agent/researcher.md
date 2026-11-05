@@ -23,6 +23,7 @@ MISSION: Answer the question from verified external sources, always with citatio
 INPUTS: question; project context; stack and versions; ToR/architecture constraints
 OUTPUTS: 01-analysis/31-research-notes-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

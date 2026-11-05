@@ -24,6 +24,7 @@ MISSION: Превратить ТЗ в полные, проверяемые, го
 INPUTS: 00-requirements/02-final-requirements.md; отчёт scout по существующей кодовой базе (если предоставлен); номер итерации; замечания
 OUTPUTS: 01-analysis/10-functional-requirements.md, 11-nonfunctional-requirements.md, 12-data-flows.md, 13-user-journeys.md, 14-ui-description.md, 15-test-scenarios.md, 00-summary.md; ответ по REPLY CONTRACT
 CONSTRAINTS:
+- временные файлы и временные среды создавай только в `team-workspace/<slug>/tmp`;
 - матрица инструментов наименьших привилегий;
 - внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;

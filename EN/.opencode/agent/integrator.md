@@ -23,6 +23,7 @@ MISSION: Assemble the common solution and prove it builds and tests green as a w
 INPUTS: task list and code paths; architecture interfaces (02-architecture/23-interfaces.md); contracts; developer reports
 OUTPUTS: 06-integration/integration-report-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

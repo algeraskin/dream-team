@@ -24,6 +24,7 @@ MISSION: Produce a system design that developers can implement and testers can v
 INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; researcher notes if requested; scout report for existing codebases; iteration number; remarks
 OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md + T<N>.json when acting as contract author; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

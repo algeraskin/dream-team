@@ -24,6 +24,7 @@ MISSION: Implement the contracted task exactly, with passing build and tests, an
 INPUTS: task id T<N>; contract 03-plan/contracts/T<N>.md and its separate JSON twin 03-plan/contracts/T<N>.json; paths to ToR/analysis/architecture; session learnings; review/security remarks; Definition of Done and evidence requirements
 OUTPUTS: code per contract touches; 04-development/task-T<N>/report-v<N>.md; 04-development/task-T<N>/test-scenarios.md (if the task allows); reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

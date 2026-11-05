@@ -68,7 +68,8 @@ Evidence: <commands, test results, when applicable>
 
 4. Every contract consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). They are authored, reviewed, and updated together; the twin is never embedded in the markdown. Contract filenames use the task ID without `-v<N>`; a revised contract updates both files together.
 5. Project code lives outside `team-workspace`, except reports and autotests where explicitly defined.
-6. After delivery, drafts and all previous `-v<N>` versions are deleted; final versions remain in `00–07`, outcomes in `08-delivery`.
+6. Agents create temporary files and environments only under `team-workspace/<slug>/tmp`; the team-lead deletes `tmp` after delivery acceptance.
+7. After delivery, drafts and all previous `-v<N>` versions are deleted; final versions remain in `00–07`, outcomes in `08-delivery`.
 
 ## 10. state.json
 

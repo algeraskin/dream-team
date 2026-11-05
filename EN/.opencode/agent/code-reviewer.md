@@ -24,6 +24,7 @@ MISSION: Verify the implementation against the contract and engineering standard
 INPUTS: task id T<N>; path to its code; contract and contract JSON twin; paths to ToR/analysis/architecture; session learnings; remarks from previous review iterations; developer executable feedback section
 OUTPUTS: 05-review/T<N>-review-v<N>.md (or 05-review/final-review-v<N>.md for the common solution); reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix; bash for tests/builds only — file modification via bash is forbidden;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

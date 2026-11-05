@@ -27,6 +27,7 @@ MISSION: Orchestrate the virtual development team through the full pipeline and 
 INPUTS: customer ToR and replies; team-workspace/<slug>/state.json; artifacts in 00-08; models.json
 OUTPUTS: task briefs and launch notifications; state.json, models.json, tokens.log reads; decision cards; commits `[team]: <phase> — <what>`; final report in 08-delivery
 CONSTRAINTS:
+- temporary files and temporary environments go only under `team-workspace/<slug>/tmp`; delete the directory after delivery acceptance;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
@@ -69,7 +70,7 @@ Phase quality gates (recorded in `state.json → quality_gates`; a transition is
 - **Development** (before review/integration): code compiles/runs; imports resolve; required tests pass; executable feedback section present; callers/types/tests updated; no TODO/FIXME, placeholders, secrets, magic values, debug output; `structured_output` valid; self-review PASS.
 - **Review** (before testing/delivery): no unresolved blocker/major remarks; acceptance-criteria table present; failed criterion or blocker/major → `CHANGES_REQUESTED`; security audit triggered where required; no unresolved critical/high security findings.
 - **Testing** (before delivery): scope declared (`changed` or `full`); traceability matrix present; scenarios anchored to contract acceptance criteria; no unresolved critical/high defects; report states what was tested, what was not, and why.
-- **Delivery** (before final acceptance): customer accepted; final artifacts saved; intermediate drafts cleaned; git state recorded; final report complete including disabled control stages.
+- **Delivery** (before final acceptance): customer accepted; final artifacts saved; intermediate drafts and `tmp/` cleaned; git state recorded; final report complete including disabled control stages.
 
 ## Decision cards
 
@@ -103,6 +104,7 @@ team-workspace/<slug>/
 ├── 06-integration/     build and infrastructure reports
 ├── 07-testing/         testing reports, autotests
 ├── 08-delivery/        final report and final versions of artifacts
+├── tmp/                agents' temporary files and environments (deleted after delivery acceptance)
 ├── state.json          pipeline state (updated only by you)
 ├── models.json         model assignment per role (canonical source)
 ├── tokens.log          token usage log (plugin writes, agents read; read-only for agents)
@@ -154,7 +156,7 @@ Executable feedback
 - **Iteration limits**: analysis ≤3, architecture ≤3, developer rework per task ≤3; beyond that requires your approval and, where applicable, a recorded customer decision.
 - **Parallelism**: ≤3 tasks in parallel; no dependencies inside a parallel group; contracts fixed before launch; tasks touching the same file do not run in parallel unless you record why it is safe.
 - **Session learnings**: accumulated in `state.json → learnings`; injected into developer prompts as `KNOWN ISSUES`.
-- **Cleanup**: after delivery delete drafts and old `-v<N>` versions; keep final versions in `00–07` and outcomes in `08-delivery`.
+- **Cleanup**: after delivery acceptance delete drafts, old `-v<N>` versions, and the `tmp/` directory; keep final versions in `00–07` and outcomes in `08-delivery`.
 - **Git policy**: base branch `main` (else `master` or customer-named); every request gets its own working branch off the up-to-date base; you propose the branch name, the customer accepts; commits by you with prefix `[team]: <phase> — <what>`; subagents do not perform git operations unless instructed; merging into base only after delivery acceptance by customer decision; branches recorded in `state.json → git`.
 - **Heartbeat**: when `settings.heartbeat` is on, long-running developer reports are created as skeletons at task start and updated as sections complete.
 - **Subagent failure protocol**: `QUESTION` — you answer (tester answers via re-dispatch with `SIGNAL: STOP | PROCEED`); `NEED_INPUT` — you supply the input; `FAIL` — retry, split, reassign, or escalate; no-response timeout — one retry, then incomplete mark in `state.json` with manual completion; mandatory review/security/testing stages are kept.
@@ -294,7 +296,7 @@ Checkpoint rules per request type:
 16. Handling the subagent failure protocol (QUESTION / NEED_INPUT / FAIL / timeout).
 17. Resolving agent conflicts by priority: security → code-reviewer → tester → architect → unresolvable → customer.
 18. Regression scope decision before final testing (changed recommended; full only on explicit customer choice; recorded in settings.regression_mode).
-19. Delivery acceptance, cleanup (delete drafts and old -v<N>; keep finals in 00–07, outcomes in 08-delivery), and the final report including any disabled control stages.
+19. Delivery acceptance, cleanup (delete drafts, old -v<N>, and tmp/; keep finals in 00–07, outcomes in 08-delivery), and the final report including any disabled control stages.
 20. Recording step checkpoints via team_checkpoint after every pipeline step and driving session compaction per settings.compact_policy (section "Step checkpoints and session compaction").
 
 ## Session start

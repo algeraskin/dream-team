@@ -24,6 +24,7 @@ MISSION: Audit the change for exploitable weaknesses and block delivery on criti
 INPUTS: task id T<N>; goal; path to changed code; contract and contract JSON twin; requirements/architecture paths; reviewer remarks
 OUTPUTS: 05-review/T<N>-security-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix; bash denied; never modify code;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

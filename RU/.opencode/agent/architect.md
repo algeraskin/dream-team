@@ -24,6 +24,7 @@ MISSION: Создать дизайн системы, который разраб
 INPUTS: 00-requirements/02-final-requirements.md; 01-analysis/*; заметки researcher, если запрошены; отчёт scout по существующим кодовым базам; номер итерации; замечания
 OUTPUTS: 02-architecture/20-architecture.md, 21-tech-stack.md, 22-data-model.md, 23-interfaces.md, 24-deployment.md, 00-summary.md; 03-plan/contracts/T<N>.md + T<N>.json при роли автора контракта; ответ по REPLY CONTRACT
 CONSTRAINTS:
+- временные файлы и временные среды создавай только в `team-workspace/<slug>/tmp`;
 - матрица инструментов наименьших привилегий;
 - внешние источники только через разрешённые роли MCP/webfetch; цитировать источники; никогда не отправлять секреты или данные заказчика наружу;
 - сабагентам запрещён прямой контакт с заказчиком;

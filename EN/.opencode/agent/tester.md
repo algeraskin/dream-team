@@ -24,6 +24,7 @@ MISSION: Verify the delivered change against declared scope and acceptance crite
 INPUTS: mode (isolated task or final testing); verification scope (changed/full); code; requirements; contract twin acceptance criteria; previous iteration reports; reviewer/security remarks to verify
 OUTPUTS: 07-testing/<scope>-report-v<N>.md; 07-testing/autotests/ on explicit request; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;

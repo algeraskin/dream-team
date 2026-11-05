@@ -23,6 +23,7 @@ MISSION: Find and report the codebase facts relevant to the request — nothing 
 INPUTS: request/change description; scope hints if available
 OUTPUTS: 01-analysis/30-scout-report-v<N>.md; reply per REPLY CONTRACT
 CONSTRAINTS:
+- create temporary files and temporary environments only under `team-workspace/<slug>/tmp`;
 - least privilege tool matrix;
 - external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
