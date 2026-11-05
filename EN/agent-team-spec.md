@@ -2244,71 +2244,38 @@ The journal is read-only.
 
 ---
 
-## 11. Charter (AGENTS.md) — required content
+## 11. Charter (AGENTS.md) — required content (two-tier model)
 
-AGENTS.md must contain:
+The charter is split into two tiers so that orchestration details are not injected into every subagent call. The AGENTS.md section numbering (§1–§16) is preserved: sections moved to the team-lead remain in AGENTS.md as one-line pointers, so references like "AGENTS.md §N" stay valid.
 
-1. Purpose.
-2. Role table with 12 agents.
-3. Interaction rules:
-   - customer ↔ team lead only;
-   - `question` belongs to team lead only;
-   - task delegation;
-   - no direct subagent calls;
-   - security gate.
-4. Tool matrix.
-5. Request types and pipelines.
-6. Workflow and phase quality gates, including step checkpoints and session compaction (§6.1).
-7. Decision card rules.
-8. Workspace structure.
-9. Artifact rules:
-   - `-v<N>`;
-   - header template;
-   - `Related to`;
-   - contract twin versioning.
-10. state.json schema:
-    - request_type;
-    - settings;
-    - quality_gates;
-    - routing_hints;
-    - learnings;
-    - tasks;
-    - flow;
-    - git;
-    - canonical models in `models.json`.
-11. Contract JSON twin and validation before dispatch.
-12. Executable feedback requirement.
-13. Handoff rule preamble.
-14. Global constraints:
-    - iteration limits;
-    - parallelism;
-    - tool matrix;
-    - security gate;
-    - session learnings;
-    - cleanup;
-    - languages;
-    - git policy;
-    - security;
-    - external information sourcing and MCP preference;
-    - token accounting;
-    - step checkpoints and compaction;
-    - heartbeat;
-    - failure protocol;
-    - conflict resolution.
-15. Exchange protocol:
-    - task brief;
-    - subagent reply format;
-    - self-review;
-    - structured output;
-    - launch notifications and digests;
-    - testing completeness;
-    - custom-flow;
-    - decision cards.
-16. Appendix A:
-    - standard role skeleton;
-    - mandatory prompt blocks.
+**Tier 1 — AGENTS.md (slim, injected into every call via `instructions`).** Binding for all agents; contains only invariants:
 
----
+1. Purpose and language policy.
+2. Role composition (team-lead primary + 11 subagents).
+3. Interaction-rule invariants: customer ↔ team-lead only; `question`/`task` belong to the team-lead; no direct subagent calls; the security gate.
+4. Tool-matrix principle (least privilege; frontmatter `tools:` is the single source of truth).
+5. Pointers to orchestration sections (§5–8, §10, §12, §15.1, §15.4–15.6, §16) → `.opencode/agent/team-lead.md` or role-specific agent files.
+6. Artifact rules §9 in full: markdown; `-v<N>`; header template; `Related to`/`Depends on`/`Evidence`; two-file contract `T<N>.md` + `T<N>.json`.
+7. §11 (invariant part): two-file contract, mandatory twin fields, `NEED_INPUT` on a missing/invalid twin, verbatim quoting of acceptance criteria.
+8. §13 Handoff rule in full.
+9. §14 (common constraints): languages, security (secrets/external services), external information and MCP priorities, token accounting; pointer to orchestration constraints.
+10. §15.3 structured_output block in full; §15.2 (briefly): DONE/QUESTION/NEED_INPUT/FAIL status semantics.
+
+**Tier 2 — `.opencode/agent/team-lead.md`, section "Charter: orchestration part".** Binding for the team-lead; not injected into subagents:
+
+1. Request types and pipelines, custom-flow (§5, §15.6).
+2. Pipeline steps and phase quality gates (§6); step checkpoints and session compaction (§6.1).
+3. Decision card format (§7).
+4. Workspace structure (§8).
+5. state.json schema (§10; full schema — spec §4.1).
+6. Contract files: JSON twin schema and pre-dispatch validation checklist (§11).
+7. Executable feedback acceptance (§12).
+8. Orchestration global constraints: iteration limits, parallelism ≤3, learnings, cleanup, git policy, heartbeat, subagent failure protocol, conflict resolution priority (§14).
+9. Task brief format (§15.1), subagent reply format (§15.2), launch notifications (§15.4), testing completeness (§15.5).
+
+**Subagent files** (`.opencode/agent/<role>.md`) must remain self-sufficient for their role part: the ROLE/MISSION/INPUTS/OUTPUTS/CONSTRAINTS/REPLY CONTRACT skeleton, Appendix A role prompt blocks, role-specific structured_output fields, the executable feedback format (developers), the traceability matrix columns (tester).
+
+The no-weakening rule applies to both tiers: an agent file may narrow the slim charter and team-lead rules but never weaken them. When the orchestration part of the charter changes, update `RU|EN/AGENTS.md`, the "Charter: orchestration part" section of `RU|EN/.opencode/agent/team-lead.md`, and `deploy.sh` (rebuild via `build-deploy.sh`) in sync.
 
 ## 12. Replication Procedure for a New Project
 

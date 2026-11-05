@@ -21,7 +21,7 @@ Agent: team-lead only. Arguments: $ARGUMENTS (project slug, or `--settings` for 
 8. Ask about token accounting: on (recommended) / off.
 9. Ask about step-checkpoint compaction (`compact_policy`): `plugin` (recommended — the team-compact plugin compacts the session automatically after every pipeline step) / `prompt` (the team-lead publishes a `[COMPACT]` line and the customer compacts manually with ctrl+x c).
 10. Ask about auto-continuation after compaction (`after_compaction_auto`): on (recommended — the pipeline continues by itself after each step compaction; the team-lead re-reads state.json first) / off (the team-lead waits for the customer after each compaction). Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
-11. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery, `state.json` (schema per AGENTS.md §10, settings filled from steps 6–10), and `models.json`.
+11. Create `team-workspace/<slug>/` with directories 00-requirements … 08-delivery, `state.json` (schema — the charter orchestration part in `.opencode/agent/team-lead.md`, state.json section; settings filled from steps 6–10), and `models.json`.
 12. `git init` + initial commit if there is no repository.
 13. Report to the customer: heartbeat mode; launch mode; token accounting; compaction policy; auto-continuation; reminder to restart opencode to apply models.
 14. Hand over the ToR.

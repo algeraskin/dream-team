@@ -2,12 +2,42 @@
 # ToR: Virtual Software Development Team
 ## Multi-agent system for opencode
 
-**Version:** 2.6-hybrid  
-**Date:** 2026-11-03  
+**Version:** 2.9-hybrid  
+**Date:** 2026-11-04  
 **Status:** final  
 **Base:** v2.4 + process governance enhancements + GLM v2.5 borrowings  
 
 This is the unified technical specification for the “virtual development team” agent system. The file is self-contained: an analogous team can be created from it in any opencode project from scratch.
+
+## Changelog v2.9-hybrid
+
+Contract model split:
+
+1. Every development contract now consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). The twin is a standalone file and is no longer embedded in the markdown.
+2. `state.json → tasks[]` adds `contract_twin`; `contract_twin_status: valid` requires both files to exist and the twin to pass the validation checklist.
+3. Task briefs add `CONTRACT_TWIN`; handoff, validation, and acceptance criteria reference both paths.
+4. The narrative contract is authoritative for intent and semantics; the twin is authoritative for machine-checkable dispatch fields; a contradiction is a contract defect.
+5. Token accounting now works on OpenCode V2 (`session.step.*`) and 1.x (`message.updated`), ignores duplicate updates, and records session, role, model, provider, tokens, and cost.
+
+## Changelog v2.8-hybrid
+
+External information sourcing through MCP:
+
+1. New §5.22 defines the external-source policy: local sources first, then MCP `context7` for library/framework/SDK/API documentation, MCP `fetch` for known URLs, MCP `ddg-search` for discovery, and built-in `webfetch` only as a fallback for roles that are granted `fetch`.
+2. The tool matrix is updated: `researcher`, `architect`, `backend-dev`, `frontend-dev`, and `devops` receive MCP access. `security` and the remaining roles stay local-only and route external questions through `researcher`.
+3. Agent prompts and Appendix A receive MCP-first lookup blocks. Tool availability is checked at runtime by each agent; no MCP state is stored in `state.json`.
+4. `deploy.sh` now configures optional `context7`, `fetch`, and `ddg-search` MCP servers in `opencode.json` with an idempotent merge and a `--no-mcp` opt-out.
+5. New acceptance criteria 63–70 (§13).
+
+## Changelog v2.7-hybrid
+
+Step checkpoints and session compaction:
+
+1. `team_checkpoint` tool (team-lead only) + `team-compact` plugin: after every completed pipeline step the team lead records a checkpoint, and the session is compacted per `settings.compact_policy` (`plugin` — automatic compaction with a `state.json` snapshot injected into the summary; `prompt` — manual compaction by the customer).
+2. New settings: `settings.compact_policy` (`plugin|prompt`, default `plugin`) and `settings.after_compaction_auto` (default `true`), configured at `/team-setup`.
+3. New digest line `[COMPACT]` in launch notifications (§6.4); new files `compaction.log` and the transient `.compact-pending.json` in the workspace (§4).
+4. New sections: §3.5 (checkpoints in the pipeline), §5.21 (compaction policy); commands `/team-setup`, `/team-status`, `/team-resume` extended.
+5. New acceptance criteria 59–62 (§13).
 
 ## Changelog v2.6-hybrid
 
@@ -71,6 +101,7 @@ A virtual full-cycle software development team. The customer hands the Terms of 
 13. Every subagent performs self-review before reporting `DONE`.
 14. Every subagent reply includes a machine-readable `structured_output` block.
 15. Customer-facing phase transitions and substantive questions are published as decision cards ending with the team lead’s recommendation and rationale.
+16. Every completed pipeline step ends with a checkpoint: `state.json` is updated first, then the team lead calls `team_checkpoint`, and the session is compacted per `settings.compact_policy`. After every compaction, `state.json` and artifacts are re-read, never recalled from chat memory.
 
 ---
 
@@ -127,24 +158,29 @@ The frontmatter `tools:` block of each `.opencode/agent/<role>.md` is the single
 
 | Agent | Allowed | Denied |
 |---|---|---|
-| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands | `webfetch`, `lsp` |
-| `analyst`, `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, `task`, `question` |
-| `researcher` | `read`, `list`, `glob`, `grep`, `webfetch`, `mcp.context7` / fetch MCP for external knowledge, `write`, `edit` | `bash`, `task`, `question` |
-| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` for tests/builds only | `task`, `question` |
-| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question` |
-| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question` |
-| `integrator`, `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question` |
+| `team-lead` | `task`, `question`, `todowrite`, `todoread`, `read`, `grep`, `glob`, `list`, `write`, `edit`, `bash` for git and service commands, `team_checkpoint` | `webfetch`, MCP `context7`/`fetch`/`ddg-search`, `lsp` |
+| `analyst` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `architect` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `bash`, `task`, `question` |
+| `scout` | `read`, `list`, `glob`, `grep`, `write`, `edit` | `bash`, `webfetch`, MCP external tools, `task`, `question` |
+| `researcher` | `read`, `list`, `glob`, `grep`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback), `write`, `edit` | `bash`, `task`, `question` |
+| `backend-dev`, `frontend-dev` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp`, MCP `context7`/`fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question` |
+| `code-reviewer` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit`, `bash` for tests/builds only | `task`, `question`, `webfetch`, MCP external tools |
+| `security` | `read`, `list`, `glob`, `grep`, `lsp`, `write`, `edit` | `bash`, `task`, `question`, `webfetch`, MCP external tools |
+| `tester` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `lsp` | `task`, `question`, `webfetch`, MCP external tools |
+| `integrator` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep` | `task`, `question`, `webfetch`, MCP external tools |
+| `devops` | `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, MCP `fetch`/`ddg-search`, `webfetch` (fallback) | `task`, `question`, MCP `context7` unless explicitly enabled |
 
 Notes:
 
 1. Platform constraint: in opencode ≥ 1.19, `write`, `edit`, and `patch` share a single permission rule, so artifact-author roles receive both `write` and `edit`.
 2. The ban on overwriting other roles’ artifacts and previous `-v<N>` versions is enforced by charter rules, not by the toolset.
-3. `question` belongs to `team-lead` only and is explicitly disabled in subagents.
+3. `question` belongs to `team-lead` only and is explicitly disabled in subagents. `team_checkpoint` (the step-checkpoint tool provided by the team-compact plugin) also belongs to `team-lead` only.
 4. `bash` is role-scoped:
    - `code-reviewer`: tests/builds only; file modification via bash is forbidden;
    - `team-lead`: git and service commands only.
+5. MCP tools are named `<server>_<tool>` and are part of the least-privilege matrix. Roles without external access must explicitly disable `context7_*`, `fetch_*`, and `ddg-search_*` in frontmatter; a globally configured MCP server must not leak into them.
+6. `webfetch` is a fallback for roles that are granted `fetch`. Use it only when the preferred MCP tool is unavailable; never prefer it over an available MCP tool. External network access for research must not be performed through `bash`/`curl`/`wget`.
+7. Tool availability is checked at runtime by the agent. Do not store MCP availability in `state.json` and do not probe MCP servers during `/team-setup`.
 
 ---
 
@@ -174,13 +210,15 @@ The security gate applies even in custom-flow, except for the customer’s expli
 | 2. Clarify | Questions to the customer; solution options with pros/cons | `00-requirements/01-clarifications.md`, `02-final-requirements.md` |
 | 2b. Flow configuration | Only for `custom-flow`: agree stage enable/disable and refinements | `state.json → flow`, optionally `00-requirements/03-flow-v<N>.md` |
 | 3. Analysis | `task → analyst`: PRD-style requirement pool, FR/NFR, flows, journeys, UI, scenarios, open questions | `01-analysis/` |
-| 4. Architecture | `task → architect`: testable system design, stack, interfaces, failure modes, contracts with JSON twins | `02-architecture/`, contract twins if already created |
-| 5. Decomposition | Atomic tasks, dependency order, parallel groups, contracts with valid JSON twins | `03-plan/00-decomposition.md`, `01-tasks.md`, `02-schedule.md`, `contracts/T<N>.md` |
+| 4. Architecture | `task → architect`: testable system design, stack, interfaces, failure modes, contracts with separate JSON twins | `02-architecture/`, `03-plan/contracts/T<N>.md + T<N>.json` if already created |
+| 5. Decomposition | Atomic tasks, dependency order, parallel groups, contracts with valid JSON twins | `03-plan/00-decomposition.md`, `01-tasks.md`, `02-schedule.md`, `contracts/T<N>.md`, `contracts/T<N>.json` |
 | 6. Development | Parallel groups up to 3 tasks; code → review → security if triggered → rework → isolated testing | `04-development/task-T<N>/report-v<N>.md`, `test-scenarios.md`, `05-review/T<N>-review-v<N>.md` |
 | 7. Integration | `task → integrator` assembles the common solution | `06-integration/integration-report-v<N>.md` |
 | 8. Review of common solution | `task → code-reviewer`; security if required; blocker/major → rework | `05-review/final-review-v<N>.md` |
 | 9. Final testing | Record regression decision; `task → tester` with `SCOPE`; traceability matrix; critical/high → rework | `07-testing/<scope>-report-v<N>.md` |
 | 10. Delivery | Customer acceptance, final report, cleanup | `08-delivery/00-final-report.md` |
+
+Checkpoints: every completed step ends with a checkpoint per §3.5 (recorded after `state.json` is updated).
 
 ### 3.2. Pipeline rules
 
@@ -296,6 +334,30 @@ Rules:
 2. For phase transitions, the card must reference the corresponding quality gate status.
 3. In `custom-flow`, the customer’s confirmation is still required for subagent launches.
 4. Decision cards do not replace the security gate or quality gates.
+
+### 3.5. Step checkpoints and session compaction
+
+Every completed pipeline step ends with a checkpoint. Order:
+
+1. The team lead updates `state.json` (phase, step, quality gates, tasks, learnings, git).
+2. The gate result or decision card is published, if the step produced one.
+3. As the last action of the turn, the team lead calls `team_checkpoint` with `phase` (current state.json phase), `step` (short step id, e.g. `3-analysis`, `6-development`, `8-review`), and `next_action` (what the team should do after compaction, or an empty string).
+4. The turn ends. The next step is never started in the same turn.
+
+Checkpoints per request type:
+
+- `full-project`: after steps 1, 2, 2b (custom-flow only), 3, 4, 5, 6 (after the whole development phase, not per task), 7, 8 (including security when triggered), 9, 10.
+- `increment`/`bugfix`: after scout (analysis), development, review (including security), testing, delivery.
+- `question`: no checkpoints, no compaction.
+
+Behavior per `settings.compact_policy`:
+
+- `plugin` (default): the team-compact plugin compacts the session on `session.idle` (see §5.21) and injects a `state.json` snapshot into the compaction summary. With `after_compaction_auto: true` the pipeline continues automatically; the first action after compaction is re-reading `state.json`. With `after_compaction_auto: false` the team lead waits for the customer.
+- `prompt`: the tool returns a manual instruction; the team lead publishes the `[COMPACT]` line (§6.4) and asks the customer to compact (ctrl+x c / Compact session), then continues only after the customer does, re-reading `state.json` first. `after_compaction_auto` is not applicable to manual compaction.
+
+Forbidden: calling `team_checkpoint` before updating `state.json`; twice per step; on `question` requests; inside a parallel development group. On a tool error: fix `state.json`, retry once; on repeated failure tell the customer and fall back to the prompt behavior.
+
+After every compaction the snapshot in the summary is only a pointer: `state.json` and artifacts are authoritative and must be re-read before acting.
 <!-- ===== end of agent-02.md ===== --><!-- ===== agent-03.md ===== -->
 
 ---
@@ -310,7 +372,7 @@ team-workspace/<slug>/
 ├── 01-analysis/        FR/NFR + requirement pool, data flows, journeys, UI, test scenarios,
 │                       scout reports, research notes
 ├── 02-architecture/    architecture, stack, data model, interfaces, deployment
-├── 03-plan/            decomposition, tasks, schedule, contracts/T<N>.md with JSON twins
+├── 03-plan/            decomposition, tasks, schedule, contracts/T<N>.md (narrative) + T<N>.json (twin)
 ├── 04-development/     task-T<N>/: developer reports, isolated-test scenarios
 ├── 05-review/          review reports, security reports
 ├── 06-integration/     build and infrastructure reports
@@ -318,18 +380,21 @@ team-workspace/<slug>/
 ├── 08-delivery/        final report and final versions of artifacts
 ├── state.json          pipeline state
 ├── models.json         model assignment per role
-└── tokens.log          token usage log, plugin writes, agents read
+├── tokens.log          token usage log, plugin writes, agents read
+├── compaction.log      compaction journal (JSONL), team-compact plugin writes, agents read
+└── .compact-pending.json  transient checkpoint marker, created and consumed by the team-compact plugin
 ```
 
 ### Artifact rules
 
-1. An artifact is markdown.
+1. Human-readable artifacts are markdown. The machine contract twin `T<N>.json` is the only JSON artifact type; service files (`state.json`, `models.json`, `tokens.log`, `compaction.log`, `.compact-pending.json`) are not artifacts.
 2. A new iteration = a new file `-v<N>`.
 3. Previous versions are never overwritten.
-4. Contract files end with the fenced JSON twin. The twin is versioned together with the contract.
+4. Every contract consists of two files with the same base name: `T<N>.md` (narrative) and `T<N>.json` (machine twin). They are authored, reviewed, and updated together; the twin is never embedded in the markdown. Contract filenames use the task ID without `-v<N>`; a revised contract updates both files together.
 5. Project code lives outside `team-workspace`, except reports and autotests where explicitly defined.
-6. `tokens.log` is read-only for agents.
+6. `tokens.log` and `compaction.log` are read-only for agents.
 7. After delivery, drafts and all previous `-v<N>` versions are deleted. Final versions remain in `00–07`, outcomes in `08-delivery`.
+8. `.compact-pending.json` is a transient service file of the team-compact plugin, not an artifact; agents never edit it.
 
 ### Artifact header template
 
@@ -366,7 +431,9 @@ Evidence: <commands, test results, when applicable>
     "heartbeat": true,
     "launch_mode": "auto",
     "tokens_log": true,
-    "regression_mode": "changed"
+    "regression_mode": "changed",
+    "compact_policy": "plugin",
+    "after_compaction_auto": true
   },
   "iterations": {
     "analysis": 0,
@@ -414,6 +481,7 @@ Evidence: <commands, test results, when applicable>
       "depends_on": [],
       "parallel_group": 1,
       "contract": "03-plan/contracts/T1.md",
+      "contract_twin": "03-plan/contracts/T1.json",
       "code_paths": [],
       "artifacts": [],
       "auto_launch": false,
@@ -478,7 +546,7 @@ Evidence: <commands, test results, when applicable>
     The choice is written as `changed` or `full`. Missing means `changed`. The question is not asked when testing is disabled in flow.
 13. `tasks[].auto_launch` is set when the customer chose “Launch and don’t ask until this task’s verdict”.
 14. `tasks[].note` stores service notes by the team lead, including explicit waivers for failing executable feedback.
-15. `tasks[].contract_twin_status` is `missing`, `invalid`, or `valid`.
+15. `tasks[].contract_twin_status` is `missing`, `invalid`, or `valid`; `valid` requires both `T<N>.md` and `T<N>.json` to exist and the twin to pass the validation checklist.
 16. `tasks[].security_sensitive` mirrors the twin and/or security gate decision.
 17. `tasks[].executable_feedback_status` is `missing`, `failed`, `passed`, or `waived`.
 18. `tasks[].review_status` stores the latest review/security/testing verdict relevant to the task.
@@ -487,14 +555,22 @@ Evidence: <commands, test results, when applicable>
 21. With substantive refinements, flow configuration is duplicated as `00-requirements/03-flow-v<N>.md`, path stored in `flow.artifact`. The canonical source remains `state.json → flow`.
 22. `git.base` and `git.branch` record the base and current working branch for the request.
 23. A light pipeline in a delivered project (`phase: done`) reactivates the project by changing `request_type`, moving `phase` back as work proceeds, and maintaining `tasks`.
+24. `settings.compact_policy` is set at `/team-setup`. Values: `plugin` (default; the team-compact plugin compacts the session at step checkpoints and injects a `state.json` snapshot into the summary) or `prompt` (the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c). Missing means `plugin`.
+25. `settings.after_compaction_auto` is set at `/team-setup`. When `true` (default), a step-checkpoint compaction adds a synthetic continue turn and the pipeline proceeds by itself; the team lead re-reads `state.json` first. When `false`, the team lead waits for the customer. Meaningful only with `compact_policy: plugin`; with `prompt` the value is written as `false` (manual compaction never auto-continues).
+26. `tasks[].contract` is the path to the narrative contract `03-plan/contracts/T<N>.md`; `tasks[].contract_twin` is the path to the separate JSON twin `03-plan/contracts/T<N>.json`.
 
 ---
 
-## 4.2. Contract JSON twin
+## 4.2. Contract files: narrative and JSON twin
 
-Every contract file `03-plan/contracts/T<N>.md` must end with a fenced JSON block called the contract twin.
+Every development contract consists of two separate files in `03-plan/contracts/` with the same base name:
 
-Example:
+- `T<N>.md` — the narrative contract: goal, scope, interfaces, errors, validation, idempotency/retry, implementation notes, and acceptance criteria in readable form;
+- `T<N>.json` — the machine-checkable contract twin validated before dispatch.
+
+The twin is a standalone JSON file, never embedded in the markdown. The two files share the task ID and are authored, reviewed, and updated together. The narrative contract is authoritative for intent; the twin is authoritative for machine-checkable dispatch fields. They must not contradict.
+
+Example twin (`03-plan/contracts/T1.json`):
 
 ```json
 {
@@ -525,7 +601,7 @@ Example:
 
 ### Twin rules
 
-1. The twin is part of the contract artifact and is versioned together with it.
+1. The twin is a separate file next to the narrative contract; both share the task ID and are authored, reviewed, and updated together.
 2. The team lead parses and validates the twin before dispatch.
 3. A task whose contract twin is missing or invalid must not be dispatched.
 4. An invalid twin is returned to the author with `STATUS: NEED_INPUT`.
@@ -543,6 +619,8 @@ Example:
     - `touches`
     - `blocked_by`
     - `security_sensitive`
+12. The narrative `T<N>.md` is authoritative for intent and semantics; the twin `T<N>.json` is authoritative for machine-checkable dispatch fields. A contradiction between them is a contract defect.
+13. `state.json → tasks[]` records both paths: `contract` (`T<N>.md`) and `contract_twin` (`T<N>.json`).
 
 ### Validation checklist
 
@@ -556,6 +634,7 @@ Before dispatch, the team lead checks:
 6. `security_sensitive` is boolean.
 7. Inputs exist as artifact paths or explicitly marked external references.
 8. Outputs are compatible with the task assignee’s role and permissions.
+9. The narrative `T<N>.md` exists and does not contradict the twin.
 
 ---
 
@@ -624,6 +703,9 @@ Rules:
 - Least privilege is mandatory.
 - The frontmatter `tools:` block is the single source of truth.
 - Agent files may narrow applicable permissions or rules, but not weaken mandatory charter constraints.
+- MCP tools (`context7_*`, `fetch_*`, `ddg-search_*`) are listed explicitly in the same block. A role without external access sets them to `false`.
+- `webfetch` is allowed only where `fetch` is allowed, and only as a fallback.
+- Tool availability is checked at runtime; no MCP availability is persisted in `state.json`.
 
 ### 5.4. Security gate
 
@@ -657,9 +739,9 @@ If a required input does not have an artifact path, the receiving agent must rep
 
 ### 5.7. Contract twin rule
 
-Every development contract must have a valid JSON twin before dispatch.
+Every development contract consists of `T<N>.md` (narrative) and `T<N>.json` (twin) and must have a valid twin before dispatch.
 
-The team lead validates the twin. Acceptance criteria are quoted verbatim into reviewer and tester briefs.
+The team lead validates the twin file. Acceptance criteria are quoted verbatim from the twin into reviewer and tester briefs.
 
 ### 5.8. Executable feedback rule
 
@@ -759,11 +841,14 @@ Similar bug patterns found outside the task are reported, not fixed.
 
 - Secrets only via environment variables and `.env.example`.
 - Customer data must not be sent to external services without necessity.
+- Never send secrets, credentials, personal data, or customer code to external MCP servers or websites. External queries must be minimal and public.
 - Security findings must be concrete, actionable, and severity-graded.
 
 ### 5.16. Token accounting
 
 - The team-tokens plugin maintains `tokens.log` automatically when enabled.
+- OpenCode V2 records one JSONL entry per completed assistant step (`session.step.ended`/`session.step.failed`); OpenCode 1.x records one entry per completed assistant message (`message.updated`). Duplicate updates for the same message or event are ignored.
+- Entry fields: `ts`, `session`, `message`, `role`, `model`, `provider`, `task` (when the runtime supplies one), `tokens` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`), `cost`.
 - Agents never edit the journal.
 - Detailed statistics are shown by `/team-tokens-used`.
 
@@ -796,6 +881,42 @@ After delivery:
 - all previous `-v<N>` versions are deleted;
 - final versions remain in `00–07`;
 - outcomes remain in `08-delivery`.
+
+### 5.21. Step checkpoints and compaction policy
+
+- After every completed pipeline step (§3.5) the team lead calls `team_checkpoint` as the last action of the turn, after updating `state.json`.
+- The `team-compact` plugin consumes the checkpoint marker on `session.idle`:
+  - requests session compaction via the opencode summarize API with `auto = settings.after_compaction_auto`;
+  - injects a deterministic `state.json` snapshot (project, request type, phase, step, iterations, git, quality gates, task table, customer question, pending checkpoint) into the compaction prompt via the `experimental.session.compacting` hook;
+  - appends one JSONL record to `compaction.log` per event (`checkpoint`, `summarize_requested`, `summarize_failed`, `skipped`, `compacted`).
+- The model for compaction is taken from the last assistant message of the session, with fallback to `models.json → team-lead`.
+- A checkpoint marker is consumed by the main session only; subagent sessions never trigger compaction. A stale marker (older than 15 minutes) or `phase: done` clears the marker without compacting.
+- With `compact_policy: prompt` the plugin compacts nothing: the team lead publishes `[COMPACT]` and the customer compacts manually (ctrl+x c); the `state.json` snapshot is still injected into any manual compaction.
+- `tokens.log` and `compaction.log` are read-only for agents; `.compact-pending.json` is transient and never edited by agents.
+- After every compaction, `state.json` and artifacts are re-read; the summary is never treated as a source of truth.
+### 5.22. External information sourcing and MCP preference
+
+This section applies to every role that performs external information search. Local sources always come first: code, project documentation, lockfiles, and existing usage.
+
+Tool routing:
+
+1. `context7` — library, framework, SDK, API, and tool documentation. Resolve the library ID, then query the docs for the exact project version.
+2. `fetch` — a known URL, preferably an official documentation page or specification.
+3. `ddg-search` — discovery when the URL is unknown; fetch the selected result afterward.
+4. `webfetch` — fallback only for roles that are granted `fetch`; use it when the preferred MCP tool is unavailable.
+5. If no permitted external tool is available, report `NEED_INPUT` or record the limitation. Never invent URLs, versions, APIs, or behavior.
+
+Rules:
+
+- Check the actual tool list at task start; do not assume a server is configured.
+- Cite every external source: title, URL, access date, and the claim it supports.
+- Record which MCP tool was used and whether a fallback was required.
+- `context7` is not a general-purpose search engine; use `fetch`/`ddg-search` for non-library pages.
+- Do not use external sources to expand the task scope; use them only to confirm contracted behavior.
+- Never send secrets, credentials, personal data, or customer code to external services.
+- Do not bypass the tool matrix with `bash`, `curl`, or `wget` for research.
+- `security` and all other roles without external tools route external questions through the team lead to `researcher`.
+
 <!-- ===== end of agent-04.md ===== --><!-- ===== agent-05.md ===== -->
 
 ---
@@ -815,6 +936,7 @@ MODE: full | rework | diagnose
 GOAL: <one verifiable goal>
 CONTEXT: <project, stack, relevant decisions, existing patterns>
 CONTRACT: <path to 03-plan/contracts/T<N>.md>
+CONTRACT_TWIN: <path to 03-plan/contracts/T<N>.json>
 ITERATION: <N>
 REMARKS: <review/security/testing remarks or none>
 LEARNINGS: <KNOWN ISSUES, preferences, patterns or none>
@@ -843,6 +965,9 @@ EXECUTABLE_FEEDBACK: required | not-applicable
 DO_NOT_TOUCH: <paths outside task scope>
 TEST_COMMAND: <verification command>
 SELF_REVIEW: required
+EXTERNAL_RESEARCH: required | optional | not-needed
+PREFERRED_MCP: context7 | fetch | ddg-search | any | none
+SOURCES_REQUIRED: yes | no
 ```
 
 Mandatory rules:
@@ -853,6 +978,8 @@ Mandatory rules:
 4. Analysis, architecture, and planning tasks must include `OUTPUT_ARTIFACTS` and `DEFINITION_OF_DONE`.
 5. Tester tasks must include `SCOPE`.
 6. A task must not be dispatched if its exit criteria are not testable.
+7. A task with `EXTERNAL_RESEARCH: required` must include `SOURCES_REQUIRED: yes` and name the permitted MCP tools in the brief.
+8. Development briefs must include both `CONTRACT` (`T<N>.md`) and `CONTRACT_TWIN` (`T<N>.json`); a missing path blocks dispatch.
 
 ---
 
@@ -1009,6 +1136,14 @@ After the reply:
 [RESULT] task=<T<N>> status=<status> verdict=<verdict> counters=<counters> root_cause=<root_cause or N/A>
 ```
 
+At a step checkpoint (§3.5), after `team_checkpoint`:
+
+```text
+[COMPACT] phase=<phase> step=<step> policy=<plugin|prompt> auto=<true|false> next=<one-line next action or N/A>
+```
+
+With `policy=plugin` the team lead adds that the session will be compacted automatically at the end of the turn; with `policy=prompt` — asks the customer to compact manually (ctrl+x c) and ends the turn.
+
 Full task prompt and full reply are shown only in:
 
 - `launch_mode: confirm`;
@@ -1136,6 +1271,8 @@ A decision card must always contain:
 }
 ```
 
+`deploy.sh` merges optional MCP servers (`context7`, `fetch`, `ddg-search`) into this file; they are not required for the team to run. On opencode V2 the servers are written under `mcp.servers`; on 1.x the legacy top-level `mcp` map is used. Agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
+
 Agent frontmatter must include:
 
 - `name`;
@@ -1145,6 +1282,11 @@ Agent frontmatter must include:
 - optional `model`: filled during onboarding.
 
 The agent file body is the role system prompt. It must open with the standard role skeleton from Appendix A and continue with role-specific duties.
+
+Plugins (`.opencode/plugins/`):
+
+- `team-tokens.js` — token accounting into `tokens.log` (§5.16);
+- `team-compact.js` — step checkpoints, session compaction per `settings.compact_policy`, `state.json` snapshot injection, `compaction.log` (§3.5, §5.21). It provides the `team_checkpoint` tool available only to `team-lead`.
 
 Skills:
 
@@ -1177,7 +1319,7 @@ Key duties:
 3. ToR clarification with options and pros/cons.
 4. Controlling analysis/architecture iterations.
 5. Decomposition into atomic tasks.
-6. Ensuring every development contract ends with a valid JSON twin.
+6. Ensuring every development contract has a narrative `T<N>.md` and a separate valid `T<N>.json` twin.
 7. Validating contract twins before dispatch.
 8. Performing Observe–Think–Act before every dispatch and phase transition.
 9. Validating phase quality gates.
@@ -1195,6 +1337,7 @@ Key duties:
 21. Resolving agent conflicts by priority.
 22. Final testing regression scope decision.
 23. Delivery acceptance and cleanup.
+24. Recording step checkpoints via `team_checkpoint` after every pipeline step and driving session compaction per `settings.compact_policy` (§3.5, §5.21).
 
 Session start:
 
@@ -1285,7 +1428,8 @@ Process:
 2. Technology selection:
    - respect ToR constraints first;
    - criteria: free licenses → open technologies → performance → open source → ease of maintenance/scaling → maturity;
-   - at least two alternatives and a comparison table per key choice.
+   - at least two alternatives and a comparison table per key choice;
+   - when external documentation is needed, use `context7` for library/framework/SDK/API docs, `fetch` for known official URLs, and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is missing; cite the source and version in `21-tech-stack.md` and, when relevant, `23-interfaces.md`.
 3. Data model.
 4. Interface contracts:
    - inputs;
@@ -1297,7 +1441,7 @@ Process:
    - testable contracts.
 5. Error model and failure modes.
 6. Deployment requirements.
-7. Contract JSON twins for contracts intended for development.
+7. Separate JSON twins (`T<N>.json`) for contracts intended for development, next to the narrative `T<N>.md`.
 
 Rules:
 
@@ -1320,7 +1464,7 @@ Artifacts:
 02-architecture/23-interfaces.md
 02-architecture/24-deployment.md
 02-architecture/00-summary.md
-03-plan/contracts/T<N>.md when acting as contract twin author
+03-plan/contracts/T<N>.md + T<N>.json when acting as contract author
 ```
 
 Skill:
@@ -1387,16 +1531,18 @@ Process:
 
 Source order:
 
-1. Local sources first: project docs, existing usage.
-2. Official documentation.
-3. For library docs, Context7 MCP when available, or specific URLs via fetch/webfetch.
-4. Official repositories.
-5. Reputable resources.
+1. Local sources first: project docs, existing usage, lockfiles.
+2. `context7` MCP, when available, for library/framework/SDK/API/tool docs: resolve the library ID and query the exact version.
+3. `fetch` MCP, when available, for a known official URL or specification.
+4. `ddg-search` MCP, when available, to discover a URL; then fetch the selected result.
+5. Official repositories and reputable resources.
 6. Verified community answers.
+7. Built-in `webfetch` only as a fallback when the MCP tools are unavailable.
 
 Rules:
 
-- Always cite fetched sources.
+- Always cite fetched sources with title, URL, access date, and the claim supported.
+- Record which MCP tool was used and whether a fallback was required.
 - Verify the source actually states the claim.
 - Never invent URLs.
 - Never present unverified information as fact.
@@ -1427,6 +1573,13 @@ Input:
 - Definition of Done and evidence requirements.
 
 Process:
+
+External documentation lookup:
+
+- If the contract depends on library/framework/API behavior not evident from the codebase, use `context7` when available and query the project-pinned version.
+- Use `fetch` for a known official URL and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is unavailable.
+- Use external sources only to confirm contracted behavior, never to expand scope.
+- Cite the source and version in the report and state any fallback.
 
 Before coding:
 
@@ -1538,6 +1691,7 @@ Additional duties:
 - If backend is unavailable, use mocks.
 - Cross-browser/responsiveness per NFRs.
 - Component/logic unit tests.
+- External documentation lookup follows `backend-dev`: `context7` for UI/framework/library docs, `fetch`/`ddg-search` for official pages, `webfetch` only as a fallback.
 
 The same rules apply for:
 
@@ -1899,6 +2053,13 @@ Step 0 — discovery:
 
 Follow found platforms/patterns.
 
+Documentation lookup:
+
+- Use `fetch` for known official docs and `ddg-search` for discovery; `webfetch` is the fallback when `fetch` is unavailable.
+- If `context7` is enabled for this role, use it only when the relevant tool/library docs are covered there.
+- Cite the official source, version, and image tag in the infra report.
+- If MCP tools are unavailable, follow local project patterns and state the limitation.
+
 Then per `infra-standards`:
 
 - Dockerfile(s);
@@ -1956,23 +2117,32 @@ Steps:
 8. Ask about token accounting:
    - on, recommended;
    - off.
-9. Create `team-workspace/<slug>/`:
+9. Ask about step-checkpoint compaction (`compact_policy`):
+   - `plugin`, recommended — the team-compact plugin compacts the session automatically after every pipeline step;
+   - `prompt` — the team lead publishes `[COMPACT]`, the customer compacts manually with ctrl+x c.
+10. Ask about auto-continuation after compaction (`after_compaction_auto`):
+   - on, recommended — the pipeline continues by itself after each step compaction (the team lead re-reads `state.json` first);
+   - off — the team lead waits for the customer after each compaction.
+
+   Ask only when `compact_policy` is `plugin`; with `prompt` write `false` (manual compaction never auto-continues).
+11. Create `team-workspace/<slug>/`:
    - `00–08`;
    - `state.json`;
    - `models.json`.
-10. `git init` + initial commit if there is no repository.
-11. Report to the customer:
+12. `git init` + initial commit if there is no repository.
+13. Report to the customer:
     - heartbeat mode;
     - launch mode;
     - token accounting;
+    - compaction policy and auto-continuation;
     - reminder to restart opencode.
-12. Hand over the ToR.
+14. Hand over the ToR.
 
 `--settings` mode:
 
 - No model poll.
 - No workspace re-creation.
-- Only mode questions: heartbeat, launch_mode, tokens_log.
+- Only mode questions: heartbeat, launch_mode, tokens_log, compact_policy, after_compaction_auto.
 - Update `state.json → settings`.
 - Remove legacy settings fields.
 
@@ -1995,6 +2165,8 @@ Show:
 - launch mode;
 - token accounting;
 - regression mode;
+- compaction policy (`compact_policy`) and auto-continuation (`after_compaction_auto`);
+- last compaction (latest `compaction.log` record: phase, step, ts) and any pending checkpoint marker (`.compact-pending.json`);
 - quality gate status;
 - routing hints if present;
 - learnings;
@@ -2020,7 +2192,9 @@ Read:
 
 Then:
 
+- Check the checkpoint marker `.compact-pending.json`: if a fresh marker (younger than 15 minutes) exists, compact the session before continuing — with `compact_policy: plugin` the compaction starts automatically on session idle, so simply end the turn; with `compact_policy: prompt` ask the customer to press ctrl+x c. A stale marker is deleted without action.
 - Summarize where the team stopped.
+- After any compaction, re-read `state.json` before acting on the summary.
 - Continue the pipeline from the committed step.
 - Do not re-run completed steps.
 - Verify models match `models.json`.
@@ -2041,12 +2215,12 @@ No journal or sections:
 
 Show:
 
-- totals by session;
+- totals by session (the closest available proxy for a launch);
 - totals by role;
-- totals by task `T<N>`;
+- totals by task `T<N>` when the journal contains task IDs, otherwise group by session/launch;
 - grand total;
-- average usage per launch;
-- top-5 most expensive launches;
+- average usage per session/launch;
+- top-5 most expensive sessions/launches;
 - anomalies.
 
 The journal is read-only.
@@ -2059,80 +2233,49 @@ The journal is read-only.
 |---|---|---|
 | `team-protocol` | all | Navigator for the charter and spec: task → section mapping. The skill itself contains no rules or schemas. |
 | `requirements-protocol` | analyst | PRD-style requirement pool, product goals, user stories, P0/P1/P2 tags, requirement pool table, acceptance criteria, NEEDS CLARIFICATION discipline. |
-| `architecture-guide` | architect | Technology selection order, DDD layers/domains, brownfield pattern-following rule, testable contracts, failure modes, alternatives, architecture quality checklist, contract twin guidance. |
+| `architecture-guide` | architect | Technology selection order, documentation evidence via MCP (`context7`/`fetch`/`ddg-search`), DDD layers/domains, brownfield pattern-following rule, testable contracts, failure modes, alternatives, architecture quality checklist, contract twin guidance. |
 | `task-dag-protocol` | team-lead, architect | Atomic decomposition, dependency DAG, inputs/outputs, touched areas, DoD, evidence, twin validation, parallel group safety, no cycles. |
 | `review-checklist` | code-reviewer | Specification, architecture/principles, correctness, security, tests, readability, typical-defect watchlist, security handoff, delta review acceptance table, verdict rule. |
 | `testing-protocol` | tester | TC and bug-report formats, severity categories, testing scope, framework discovery, autotest quality, case planning, coverage targets, SIGNAL handling, traceability matrix. |
-| `coding-standards` | backend-dev, frontend-dev | Analyzing existing code before writing, file-skeleton plan, naming, error handling, boundary validation, DI/async, minimal-fix discipline, forbidden patterns, file size guideline, executable feedback discipline. |
+| `coding-standards` | backend-dev, frontend-dev | Analyzing existing code before writing, external documentation lookup via MCP, file-skeleton plan, naming, error handling, boundary validation, DI/async, minimal-fix discipline, forbidden patterns, file size guideline, executable feedback discipline. |
 | `debugging-protocol` | backend-dev, frontend-dev in MODE diagnose | From symptom to root cause, execution path tracing, mandatory hypothesis verification, diagnosis format. |
-| `self-review-protocol` | all | Checklist before reply, evidence validation, DoD confirmation, executable feedback confirmation, structured output validation, no DONE without proof. |
-| `infra-standards` | devops | Infrastructure discovery, mandatory rules, reference Dockerfile/compose/CI/K8s templates. |
+| `self-review-protocol` | all | Checklist before reply, source and fallback validation for external research, evidence validation, DoD confirmation, executable feedback confirmation, structured output validation, no DONE without proof. |
+| `infra-standards` | devops | Infrastructure discovery, official documentation lookup via MCP, mandatory rules, reference Dockerfile/compose/CI/K8s templates. |
 
 ---
 
-## 11. Charter (AGENTS.md) — required content
+## 11. Charter (AGENTS.md) — required content (two-tier model)
 
-AGENTS.md must contain:
+The charter is split into two tiers so that orchestration details are not injected into every subagent call. The AGENTS.md section numbering (§1–§16) is preserved: sections moved to the team-lead remain in AGENTS.md as one-line pointers, so references like "AGENTS.md §N" stay valid.
 
-1. Purpose.
-2. Role table with 12 agents.
-3. Interaction rules:
-   - customer ↔ team lead only;
-   - `question` belongs to team lead only;
-   - task delegation;
-   - no direct subagent calls;
-   - security gate.
-4. Tool matrix.
-5. Request types and pipelines.
-6. Workflow and phase quality gates.
-7. Decision card rules.
-8. Workspace structure.
-9. Artifact rules:
-   - `-v<N>`;
-   - header template;
-   - `Related to`;
-   - contract twin versioning.
-10. state.json schema:
-    - request_type;
-    - settings;
-    - quality_gates;
-    - routing_hints;
-    - learnings;
-    - tasks;
-    - flow;
-    - git;
-    - canonical models in `models.json`.
-11. Contract JSON twin and validation before dispatch.
-12. Executable feedback requirement.
-13. Handoff rule preamble.
-14. Global constraints:
-    - iteration limits;
-    - parallelism;
-    - tool matrix;
-    - security gate;
-    - session learnings;
-    - cleanup;
-    - languages;
-    - git policy;
-    - security;
-    - token accounting;
-    - heartbeat;
-    - failure protocol;
-    - conflict resolution.
-15. Exchange protocol:
-    - task brief;
-    - subagent reply format;
-    - self-review;
-    - structured output;
-    - launch notifications and digests;
-    - testing completeness;
-    - custom-flow;
-    - decision cards.
-16. Appendix A:
-    - standard role skeleton;
-    - mandatory prompt blocks.
+**Tier 1 — AGENTS.md (slim, injected into every call via `instructions`).** Binding for all agents; contains only invariants:
 
----
+1. Purpose and language policy.
+2. Role composition (team-lead primary + 11 subagents).
+3. Interaction-rule invariants: customer ↔ team-lead only; `question`/`task` belong to the team-lead; no direct subagent calls; the security gate.
+4. Tool-matrix principle (least privilege; frontmatter `tools:` is the single source of truth).
+5. Pointers to orchestration sections (§5–8, §10, §12, §15.1, §15.4–15.6, §16) → `.opencode/agent/team-lead.md` or role-specific agent files.
+6. Artifact rules §9 in full: markdown; `-v<N>`; header template; `Related to`/`Depends on`/`Evidence`; two-file contract `T<N>.md` + `T<N>.json`.
+7. §11 (invariant part): two-file contract, mandatory twin fields, `NEED_INPUT` on a missing/invalid twin, verbatim quoting of acceptance criteria.
+8. §13 Handoff rule in full.
+9. §14 (common constraints): languages, security (secrets/external services), external information and MCP priorities, token accounting; pointer to orchestration constraints.
+10. §15.3 structured_output block in full; §15.2 (briefly): DONE/QUESTION/NEED_INPUT/FAIL status semantics.
+
+**Tier 2 — `.opencode/agent/team-lead.md`, section "Charter: orchestration part".** Binding for the team-lead; not injected into subagents:
+
+1. Request types and pipelines, custom-flow (§5, §15.6).
+2. Pipeline steps and phase quality gates (§6); step checkpoints and session compaction (§6.1).
+3. Decision card format (§7).
+4. Workspace structure (§8).
+5. state.json schema (§10; full schema — spec §4.1).
+6. Contract files: JSON twin schema and pre-dispatch validation checklist (§11).
+7. Executable feedback acceptance (§12).
+8. Orchestration global constraints: iteration limits, parallelism ≤3, learnings, cleanup, git policy, heartbeat, subagent failure protocol, conflict resolution priority (§14).
+9. Task brief format (§15.1), subagent reply format (§15.2), launch notifications (§15.4), testing completeness (§15.5).
+
+**Subagent files** (`.opencode/agent/<role>.md`) must remain self-sufficient for their role part: the ROLE/MISSION/INPUTS/OUTPUTS/CONSTRAINTS/REPLY CONTRACT skeleton, Appendix A role prompt blocks, role-specific structured_output fields, the executable feedback format (developers), the traceability matrix columns (tester).
+
+The no-weakening rule applies to both tiers: an agent file may narrow the slim charter and team-lead rules but never weaken them. When the orchestration part of the charter changes, update `RU|EN/AGENTS.md`, the "Charter: orchestration part" section of `RU|EN/.opencode/agent/team-lead.md`, and `deploy.sh` (rebuild via `build-deploy.sh`) in sync.
 
 ## 12. Replication Procedure for a New Project
 
@@ -2164,6 +2307,8 @@ Without access to the source tree:
 ```bash
 deploy.sh /path/to/project
 ```
+
+`deploy.sh` also merges the optional MCP servers `context7`, `fetch`, and `ddg-search` into the target `opencode.json` (idempotent; `--no-mcp` opts out). MCP is optional: agents check availability at runtime and fall back to `webfetch` or `NEED_INPUT`.
 
 Then:
 
@@ -2211,7 +2356,7 @@ Then:
 
 ### Contract twins
 
-16. Every development contract ends with a valid JSON twin.
+16. Every development contract has a narrative `T<N>.md` and a separate valid JSON twin `T<N>.json`.
 17. A task with missing or invalid twin is not dispatched and returns to the author with `STATUS: NEED_INPUT`.
 18. Acceptance criteria are quoted verbatim into reviewer and tester briefs.
 19. `security_sensitive: true` schedules the security gate.
@@ -2290,6 +2435,24 @@ Then:
 ### Cleanup
 
 58. After delivery, intermediate artifacts are deleted and final ones saved into `08-delivery`.
+
+### Step checkpoints and compaction
+
+59. After every completed pipeline step the team lead updates `state.json` and then records a checkpoint via `team_checkpoint` as the last action of the turn.
+60. With `compact_policy: plugin` the session compacts automatically at the step boundary, a `state.json` snapshot is injected into the summary, and with `after_compaction_auto: true` the pipeline continues by itself with a fresh `state.json` read.
+61. With `compact_policy: prompt` the team lead publishes `[COMPACT]` and waits for the customer to compact manually.
+62. `compaction.log` and the transient marker `.compact-pending.json` are maintained by the team-compact plugin and never edited by agents; `/team-status` shows the compaction settings and the last compaction.
+
+### External information and MCP
+
+63. The tool matrix in the specification, charter, and agent frontmatter is identical.
+64. `researcher`, `architect`, `backend-dev`, `frontend-dev`, and `devops` use `context7`/`fetch`/`ddg-search` before `webfetch`; `webfetch` is used only as a fallback.
+65. `security` has no external tools; external questions are routed through `researcher`.
+66. Every external source is cited with title, URL, access date, and the claim supported.
+67. When MCP tools are unavailable, an agent uses `webfetch` where permitted or returns `NEED_INPUT`; it does not invent data.
+68. Secrets, credentials, personal data, and customer code are never sent to external MCP servers or websites.
+69. Tool availability is checked by the agent at runtime; `state.json` contains no MCP availability fields.
+70. `deploy.sh` adds `context7`, `fetch`, and `ddg-search` idempotently, preserves existing MCP servers, and supports `--no-mcp`.
 <!-- ===== end of agent-08.md ===== --><!-- ===== agent-09.md ===== -->
 
 ---
@@ -2309,6 +2472,7 @@ INPUTS: <required artifact paths or state references>
 OUTPUTS: <artifacts and reply fields produced>
 CONSTRAINTS:
 - least privilege tool matrix;
+- external sources only through role-permitted MCP/webfetch tools; cite sources; never send secrets or customer data externally;
 - no direct customer contact for subagents;
 - no direct subagent-to-subagent calls;
 - handoff by artifact only;
@@ -2424,8 +2588,15 @@ For every interface contract:
 - Make the contract testable.
 
 For every contract intended for development:
-- End the contract file with a valid JSON twin.
+- Write the narrative contract to `T<N>.md`.
+- Write the machine twin to a separate `T<N>.json` file next to it.
 - Ensure the twin declares inputs, outputs, acceptance criteria, touches, blocked_by, and security_sensitive.
+
+External documentation:
+- Use Context7 MCP for library/framework/SDK/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the architecture artifacts.
 
 Avoid over-engineering.
 Follow YAGNI.
@@ -2455,8 +2626,8 @@ For every task provide:
 - Risks
 
 For every development task:
-- Create a contract file.
-- End the contract file with a JSON twin.
+- Create a narrative contract file `T<N>.md`.
+- Create a separate machine twin `T<N>.json` with the same base name.
 - Validate that acceptance criteria are testable.
 - Validate that blocked_by has no cycles.
 - Validate that touches matches the assigned code area.
@@ -2477,6 +2648,12 @@ Rules:
 
 ```text
 Implement only the contracted task.
+
+External documentation lookup:
+- Use Context7 MCP for library/framework/API docs when available.
+- Use fetch MCP for known official URLs and ddg-search MCP for discovery.
+- Use webfetch only as a fallback when fetch is unavailable.
+- Cite the source and version in the report.
 
 Before coding:
 - Read the contract fully.
@@ -2648,5 +2825,5 @@ Use empty arrays where there are no items.
 
 ---
 
-End of agent-team-spec v2.6-hybrid.
+End of agent-team-spec v2.9-hybrid.
 <!-- ===== end of agent-09.md ===== -->
